@@ -195,7 +195,8 @@ JSON Processing:
   - LLM responses are validated as parsable JSON
   - Valid JSON is validated against the provided schema
   - JSON is minified by default; use --pretty-print for human-readable output
-  - Output is always written regardless of validation results for debugging
+  - Output is only written to STDOUT when validation succeeds
+  - Validation errors are written to STDERR
 
 Example:
   echo "this is great" | prompt2json \
