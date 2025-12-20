@@ -579,6 +579,11 @@ func validateAndFormatJSON(config *Config, rawResponse string) (string, error) {
 		return rawResponse, &validationError{fmt.Sprintf("response is not valid JSON: %v", err)}
 	}
 
+	// Defensive check for nil compiled schema (should not happen in normal flow)
+	if config.CompiledSchema == nil {
+		return rawResponse, &validationError{"schema not compiled"}
+	}
+
 	// Validate the JSON against the pre-compiled schema
 	if err := config.CompiledSchema.Validate(jsonObj); err != nil {
 		// If validation fails, return formatted JSON with validation error
