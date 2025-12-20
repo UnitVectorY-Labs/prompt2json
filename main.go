@@ -12,6 +12,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/santhosh-tekuri/jsonschema/v5"
 	"golang.org/x/oauth2/google"
@@ -49,6 +50,7 @@ var (
 	project               string
 	location              string
 	model                 string
+	timeout               int
 	verbose               bool
 	prettyPrint           bool
 	showVersion           bool
@@ -136,6 +138,7 @@ func defineFlags() {
 	flag.StringVar(&project, "project", "", "GCP project ID")
 	flag.StringVar(&location, "location", "", "GCP location/region")
 	flag.StringVar(&model, "model", "", "Gemini model identifier")
+	flag.IntVar(&timeout, "timeout", 60, "HTTP request timeout in seconds (default: 60)")
 	flag.BoolVar(&verbose, "verbose", false, "Enable verbose logging to STDERR")
 	flag.BoolVar(&prettyPrint, "pretty-print", false, "Pretty-print JSON output")
 	flag.BoolVar(&showVersion, "version", false, "Show version")
@@ -176,6 +179,7 @@ Output:
   --pretty-print             Pretty-print JSON output (default: minified)
 
 Misc:
+  --timeout SECONDS          HTTP request timeout in seconds (default: 60)
   --verbose                  Log diagnostics to stderr
   --version                  Print version and exit
   --help                     Print help and exit
@@ -213,6 +217,7 @@ type Config struct {
 	Project              string
 	Location             string
 	Model                string
+	Timeout              int
 	OutFile              string
 	Verbose              bool
 	PrettyPrint          bool
@@ -361,6 +366,12 @@ func loadConfiguration() (*Config, error) {
 	if config.Model == "" {
 		return nil, &cliError{"--model is required"}
 	}
+
+	// Validate timeout
+	if timeout < 0 {
+		return nil, &cliError{"--timeout must be non-negative"}
+	}
+	config.Timeout = timeout
 
 	if verbose {
 		fmt.Fprintf(os.Stderr, "API configuration: project=%s location=%s model=%s\n", config.Project, config.Location, config.Model)
@@ -533,7 +544,9 @@ func callGeminiAPI(config *Config, requestBody []byte) (string, error) {
 	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token.AccessToken))
 
 	// Send request
-	client := &http.Client{}
+	client := &http.Client{
+		Timeout: time.Duration(config.Timeout) * time.Second,
+	}
 	resp, err := client.Do(req)
 	if err != nil {
 		return "", &apiError{fmt.Sprintf("failed to call API: %v", err)}
