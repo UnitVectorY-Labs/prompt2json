@@ -203,19 +203,19 @@ Example:
 }
 
 type Config struct {
-	SystemInstruction     string
-	SystemInstructionSrc  string // Source: "flag" or file path
-	Schema                map[string]interface{}
-	SchemaSrc             string // Source: "flag" or file path
-	CompiledSchema        *jsonschema.Schema
-	Prompt                string
-	PromptSrc             string // Source: "stdin", "flag", or file path
-	Project               string
-	Location              string
-	Model                 string
-	OutFile               string
-	Verbose               bool
-	PrettyPrint           bool
+	SystemInstruction    string
+	SystemInstructionSrc string // Source: "flag" or file path
+	Schema               map[string]interface{}
+	SchemaSrc            string // Source: "flag" or file path
+	CompiledSchema       *jsonschema.Schema
+	Prompt               string
+	PromptSrc            string // Source: "stdin", "flag", or file path
+	Project              string
+	Location             string
+	Model                string
+	OutFile              string
+	Verbose              bool
+	PrettyPrint          bool
 }
 
 func loadConfiguration() (*Config, error) {
