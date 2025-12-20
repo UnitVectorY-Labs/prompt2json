@@ -105,9 +105,8 @@ func run() error {
 	// Validate and format the JSON response
 	formattedJSON, validationErr := validateAndFormatJSON(config, responseJSON)
 
-	// If validation failed, write error details to STDERR and don't write to STDOUT
+	// If validation failed, don't write to STDOUT
 	if validationErr != nil {
-		fmt.Fprintf(os.Stderr, "Validation failed: %v\n", validationErr)
 		return validationErr
 	}
 
