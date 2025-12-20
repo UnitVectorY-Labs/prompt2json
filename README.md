@@ -86,6 +86,7 @@ export GOOGLE_APPLICATION_CREDENTIALS=/path/to/key.json
 | `--project`                | id    | yes      | Environment variable fallback supported             |
 | `--location`               | region| yes      | Environment variable fallback supported             |
 | `--model`                  | name  | yes      | Gemini model id                                     |
+| `--timeout`                | int   | no       | HTTP request timeout in seconds; default is 60      |
 | `--out`                    | path  | no       | Output file path; defaults to STDOUT if not set.    |
 | `--pretty-print`           |       | no       | Pretty-print JSON output; default is minified       |
 | `--verbose`                |       | no       | Logs additional information to STDERR               |
