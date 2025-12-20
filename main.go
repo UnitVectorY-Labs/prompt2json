@@ -103,17 +103,17 @@ func run() error {
 	// Validate and format the JSON response
 	formattedJSON, validationErr := validateAndFormatJSON(config, responseJSON)
 
+	if config.Verbose {
+		if config.OutFile != "" {
+			fmt.Fprintf(os.Stderr, "Output to: %s\n", config.OutFile)
+		} else {
+			fmt.Fprintf(os.Stderr, "Output to: stdout\n")
+		}
+	}
+
 	// Write output (always write, even if validation fails)
 	if err := writeOutput(config, formattedJSON); err != nil {
 		return err
-	}
-
-	if config.Verbose {
-		if config.OutFile != "" {
-			fmt.Fprintf(os.Stderr, "Output: written to %s\n", config.OutFile)
-		} else {
-			fmt.Fprintf(os.Stderr, "Output: written to stdout\n")
-		}
 	}
 
 	// Return validation error after writing output (to ensure non-zero exit code)
@@ -595,10 +595,10 @@ func callGeminiAPI(config *Config, requestBody []byte) (string, error) {
 	if config.Verbose {
 		fmt.Fprintf(os.Stderr, "API response: finish_reason=%s\n", candidate.FinishReason)
 		if geminiResp.UsageMetadata.TotalTokenCount > 0 {
-			fmt.Fprintf(os.Stderr, "Token usage: input=%d output=%d total=%d\n",
-				geminiResp.UsageMetadata.PromptTokenCount,
-				geminiResp.UsageMetadata.CandidatesTokenCount,
-				geminiResp.UsageMetadata.TotalTokenCount)
+			fmt.Fprintf(os.Stderr, "Token usage:\n")
+			fmt.Fprintf(os.Stderr, "  promptTokenCount:     %d\n", geminiResp.UsageMetadata.PromptTokenCount)
+			fmt.Fprintf(os.Stderr, "  candidatesTokenCount: %d\n", geminiResp.UsageMetadata.CandidatesTokenCount)
+			fmt.Fprintf(os.Stderr, "  totalTokenCount:      %d\n", geminiResp.UsageMetadata.TotalTokenCount)
 		}
 	}
 
