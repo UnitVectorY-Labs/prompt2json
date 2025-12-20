@@ -342,11 +342,12 @@ func loadConfiguration() (*Config, error) {
 	}
 
 	if verbose {
-		if config.PromptSrc == "stdin" {
+		switch config.PromptSrc {
+		case "stdin":
 			fmt.Fprintf(os.Stderr, "Prompt: %d bytes (from stdin)\n", len(config.Prompt))
-		} else if config.PromptSrc == "flag" {
+		case "flag":
 			fmt.Fprintf(os.Stderr, "Prompt: %d bytes (from flag)\n", len(config.Prompt))
-		} else {
+		default:
 			fmt.Fprintf(os.Stderr, "Prompt: %d bytes (from %s)\n", len(config.Prompt), config.PromptSrc)
 		}
 	}
@@ -390,13 +391,6 @@ func getConfigValue(flagValue string, envVars ...string) string {
 		}
 	}
 	return ""
-}
-
-type attachmentPart struct {
-	InlineData struct {
-		MimeType string `json:"mimeType"`
-		Data     string `json:"data"`
-	} `json:"inlineData"`
 }
 
 func loadAttachments(config *Config) ([]interface{}, error) {
