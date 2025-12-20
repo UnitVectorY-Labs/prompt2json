@@ -19,6 +19,9 @@ import (
 
 var Version = "dev" // This will be set by the build systems to the release version
 
+// Schema validation constant
+const schemaValidationURL = "schema.json"
+
 // Exit codes
 const (
 	exitCLIUsageError   = 2
@@ -203,6 +206,7 @@ type Config struct {
 	SystemInstruction string
 	Schema            map[string]interface{}
 	SchemaBytes       []byte
+	CompiledSchema    *jsonschema.Schema
 	Prompt            string
 	Project           string
 	Location          string
@@ -268,16 +272,17 @@ func loadConfiguration() (*Config, error) {
 	// Store schema bytes for later validation
 	config.SchemaBytes = schemaBytes
 
-	// Validate it's a valid JSON Schema
+	// Compile the JSON Schema once for reuse
 	compiler := jsonschema.NewCompiler()
 	compiler.Draft = jsonschema.Draft2020
-	schemaURL := "schema.json"
-	if err := compiler.AddResource(schemaURL, bytes.NewReader(schemaBytes)); err != nil {
+	if err := compiler.AddResource(schemaValidationURL, bytes.NewReader(schemaBytes)); err != nil {
 		return nil, &inputError{fmt.Sprintf("invalid JSON Schema: %v", err)}
 	}
-	if _, err := compiler.Compile(schemaURL); err != nil {
+	compiledSchema, err := compiler.Compile(schemaValidationURL)
+	if err != nil {
 		return nil, &inputError{fmt.Sprintf("invalid JSON Schema structure: %v", err)}
 	}
+	config.CompiledSchema = compiledSchema
 
 	// Load prompt
 	if prompt != "" && promptFile != "" {
@@ -574,20 +579,8 @@ func validateAndFormatJSON(config *Config, rawResponse string) (string, error) {
 		return rawResponse, &validationError{fmt.Sprintf("response is not valid JSON: %v", err)}
 	}
 
-	// Validate against JSON schema
-	compiler := jsonschema.NewCompiler()
-	compiler.Draft = jsonschema.Draft2020
-	schemaURL := "schema.json"
-	if err := compiler.AddResource(schemaURL, bytes.NewReader(config.SchemaBytes)); err != nil {
-		return "", &validationError{fmt.Sprintf("failed to load schema for validation: %v", err)}
-	}
-	compiledSchema, err := compiler.Compile(schemaURL)
-	if err != nil {
-		return "", &validationError{fmt.Sprintf("failed to compile schema for validation: %v", err)}
-	}
-
-	// Validate the JSON against the schema
-	if err := compiledSchema.Validate(jsonObj); err != nil {
+	// Validate the JSON against the pre-compiled schema
+	if err := config.CompiledSchema.Validate(jsonObj); err != nil {
 		// If validation fails, return formatted JSON with validation error
 		formattedJSON, formatErr := formatJSON(jsonObj, config.PrettyPrint)
 		if formatErr != nil {
