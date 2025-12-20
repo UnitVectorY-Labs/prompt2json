@@ -82,8 +82,6 @@ func run() error {
 		return err
 	}
 
-	logVerbose(config, "Configuration loaded successfully")
-
 	// Load attachments
 	attachmentParts, err := loadAttachments(config)
 	if err != nil {
@@ -96,15 +94,11 @@ func run() error {
 		return err
 	}
 
-	logVerbose(config, "Built Gemini API request")
-
 	// Call Gemini API
 	responseJSON, err := callGeminiAPI(config, requestBody)
 	if err != nil {
 		return err
 	}
-
-	logVerbose(config, "Received response from Gemini API")
 
 	// Validate and format the JSON response
 	formattedJSON, validationErr := validateAndFormatJSON(config, responseJSON)
@@ -114,7 +108,13 @@ func run() error {
 		return err
 	}
 
-	logVerbose(config, "Output written successfully")
+	if config.Verbose {
+		if config.OutFile != "" {
+			fmt.Fprintf(os.Stderr, "Output: written to %s\n", config.OutFile)
+		} else {
+			fmt.Fprintf(os.Stderr, "Output: written to stdout\n")
+		}
+	}
 
 	// Return validation error after writing output (to ensure non-zero exit code)
 	if validationErr != nil {
@@ -203,16 +203,19 @@ Example:
 }
 
 type Config struct {
-	SystemInstruction string
-	Schema            map[string]interface{}
-	CompiledSchema    *jsonschema.Schema
-	Prompt            string
-	Project           string
-	Location          string
-	Model             string
-	OutFile           string
-	Verbose           bool
-	PrettyPrint       bool
+	SystemInstruction     string
+	SystemInstructionSrc  string // Source: "flag" or file path
+	Schema                map[string]interface{}
+	SchemaSrc             string // Source: "flag" or file path
+	CompiledSchema        *jsonschema.Schema
+	Prompt                string
+	PromptSrc             string // Source: "stdin", "flag", or file path
+	Project               string
+	Location              string
+	Model                 string
+	OutFile               string
+	Verbose               bool
+	PrettyPrint           bool
 }
 
 func loadConfiguration() (*Config, error) {
@@ -232,16 +235,26 @@ func loadConfiguration() (*Config, error) {
 
 	if systemInstruction != "" {
 		config.SystemInstruction = strings.TrimSpace(systemInstruction)
+		config.SystemInstructionSrc = "flag"
 	} else {
 		content, err := os.ReadFile(systemInstructionFile)
 		if err != nil {
 			return nil, &inputError{fmt.Sprintf("failed to read system instruction file: %v", err)}
 		}
 		config.SystemInstruction = strings.TrimSpace(string(content))
+		config.SystemInstructionSrc = systemInstructionFile
 	}
 
 	if config.SystemInstruction == "" {
 		return nil, &inputError{"system instruction cannot be empty"}
+	}
+
+	if verbose {
+		if config.SystemInstructionSrc == "flag" {
+			fmt.Fprintf(os.Stderr, "System instruction: %d bytes (from flag)\n", len(config.SystemInstruction))
+		} else {
+			fmt.Fprintf(os.Stderr, "System instruction: %d bytes (from %s)\n", len(config.SystemInstruction), config.SystemInstructionSrc)
+		}
 	}
 
 	// Load schema
@@ -255,17 +268,27 @@ func loadConfiguration() (*Config, error) {
 	var schemaBytes []byte
 	if schema != "" {
 		schemaBytes = []byte(schema)
+		config.SchemaSrc = "flag"
 	} else {
 		content, err := os.ReadFile(schemaFile)
 		if err != nil {
 			return nil, &inputError{fmt.Sprintf("failed to read schema file: %v", err)}
 		}
 		schemaBytes = content
+		config.SchemaSrc = schemaFile
 	}
 
 	// Parse and validate schema
 	if err := json.Unmarshal(schemaBytes, &config.Schema); err != nil {
 		return nil, &inputError{fmt.Sprintf("invalid JSON in schema: %v", err)}
+	}
+
+	if verbose {
+		if config.SchemaSrc == "flag" {
+			fmt.Fprintf(os.Stderr, "Schema: %d bytes (from flag) - valid JSON\n", len(schemaBytes))
+		} else {
+			fmt.Fprintf(os.Stderr, "Schema: %d bytes (from %s) - valid JSON\n", len(schemaBytes), config.SchemaSrc)
+		}
 	}
 
 	// Compile the JSON Schema once for reuse
@@ -280,6 +303,10 @@ func loadConfiguration() (*Config, error) {
 	}
 	config.CompiledSchema = compiledSchema
 
+	if verbose {
+		fmt.Fprintf(os.Stderr, "Schema validation: compiled successfully\n")
+	}
+
 	// Load prompt
 	if prompt != "" && promptFile != "" {
 		return nil, &cliError{"cannot specify both --prompt and --prompt-file"}
@@ -287,12 +314,14 @@ func loadConfiguration() (*Config, error) {
 
 	if prompt != "" {
 		config.Prompt = strings.TrimSpace(prompt)
+		config.PromptSrc = "flag"
 	} else if promptFile != "" {
 		content, err := os.ReadFile(promptFile)
 		if err != nil {
 			return nil, &inputError{fmt.Sprintf("failed to read prompt file: %v", err)}
 		}
 		config.Prompt = strings.TrimSpace(string(content))
+		config.PromptSrc = promptFile
 	} else {
 		// Read from STDIN
 		content, err := io.ReadAll(os.Stdin)
@@ -300,10 +329,21 @@ func loadConfiguration() (*Config, error) {
 			return nil, &inputError{fmt.Sprintf("failed to read from STDIN: %v", err)}
 		}
 		config.Prompt = strings.TrimSpace(string(content))
+		config.PromptSrc = "stdin"
 	}
 
 	if config.Prompt == "" {
 		return nil, &inputError{"prompt cannot be empty"}
+	}
+
+	if verbose {
+		if config.PromptSrc == "stdin" {
+			fmt.Fprintf(os.Stderr, "Prompt: %d bytes (from stdin)\n", len(config.Prompt))
+		} else if config.PromptSrc == "flag" {
+			fmt.Fprintf(os.Stderr, "Prompt: %d bytes (from flag)\n", len(config.Prompt))
+		} else {
+			fmt.Fprintf(os.Stderr, "Prompt: %d bytes (from %s)\n", len(config.Prompt), config.PromptSrc)
+		}
 	}
 
 	// Load project, location, model with environment fallback
@@ -323,13 +363,7 @@ func loadConfiguration() (*Config, error) {
 	}
 
 	if verbose {
-		fmt.Fprintf(os.Stderr, "Configuration:\n")
-		fmt.Fprintf(os.Stderr, "  Project: %s\n", config.Project)
-		fmt.Fprintf(os.Stderr, "  Location: %s\n", config.Location)
-		fmt.Fprintf(os.Stderr, "  Model: %s\n", config.Model)
-		fmt.Fprintf(os.Stderr, "  System Instruction: %d chars\n", len(config.SystemInstruction))
-		fmt.Fprintf(os.Stderr, "  Prompt: %d chars\n", len(config.Prompt))
-		fmt.Fprintf(os.Stderr, "  Attachments: %d files\n", len(attachments))
+		fmt.Fprintf(os.Stderr, "API configuration: project=%s location=%s model=%s\n", config.Project, config.Location, config.Model)
 	}
 
 	return config, nil
@@ -405,7 +439,14 @@ func loadAttachments(config *Config) ([]interface{}, error) {
 		}
 		parts = append(parts, part)
 
-		logVerbose(config, fmt.Sprintf("Loaded attachment: %s (%s, %d bytes raw, %d bytes encoded)", path, mimeType, len(content), len(encodedData)))
+		if config.Verbose {
+			if isImage {
+				sizeMB := float64(len(content)) / (1024 * 1024)
+				fmt.Fprintf(os.Stderr, "Attachment: %s (%s, %.2f MB) - within size limits\n", path, mimeType, sizeMB)
+			} else {
+				fmt.Fprintf(os.Stderr, "Attachment: %s (%s, %d bytes)\n", path, mimeType, len(content))
+			}
+		}
 	}
 
 	// Validate total attachment size doesn't approach the 20 MB request limit
@@ -415,11 +456,9 @@ func loadAttachments(config *Config) ([]interface{}, error) {
 		return nil, &inputError{fmt.Sprintf("total attachment size exceeds limit: %.2f MB encoded (limit 20 MB)", totalMB)}
 	}
 
-	if len(attachments) > 0 {
-		logVerbose(config, fmt.Sprintf("Total attachments: %d files, %.2f MB raw, %.2f MB encoded",
-			len(attachments),
-			float64(totalRawBytes)/(1024*1024),
-			float64(totalEncodedBytes)/(1024*1024)))
+	if len(attachments) > 0 && config.Verbose {
+		totalMB := float64(totalEncodedBytes) / (1024 * 1024)
+		fmt.Fprintf(os.Stderr, "Total attachments: %d files, %.2f MB (encoded) - within limits\n", len(attachments), totalMB)
 	}
 
 	return parts, nil
@@ -480,7 +519,9 @@ func callGeminiAPI(config *Config, requestBody []byte) (string, error) {
 	url := fmt.Sprintf("https://%s-aiplatform.googleapis.com/v1/projects/%s/locations/%s/publishers/google/models/%s:generateContent",
 		config.Location, config.Project, config.Location, config.Model)
 
-	logVerbose(config, fmt.Sprintf("Calling Gemini API: %s", url))
+	if config.Verbose {
+		fmt.Fprintf(os.Stderr, "Request: POST %s\n", url)
+	}
 
 	// Create request
 	req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewReader(requestBody))
@@ -519,6 +560,11 @@ func callGeminiAPI(config *Config, requestBody []byte) (string, error) {
 			} `json:"content"`
 			FinishReason string `json:"finishReason"`
 		} `json:"candidates"`
+		UsageMetadata struct {
+			PromptTokenCount     int `json:"promptTokenCount"`
+			CandidatesTokenCount int `json:"candidatesTokenCount"`
+			TotalTokenCount      int `json:"totalTokenCount"`
+		} `json:"usageMetadata"`
 	}
 
 	if err := json.Unmarshal(respBody, &geminiResp); err != nil {
@@ -543,6 +589,17 @@ func callGeminiAPI(config *Config, requestBody []byte) (string, error) {
 	jsonText := candidate.Content.Parts[0].Text
 	if jsonText == "" {
 		return "", &validationError{"empty response text"}
+	}
+
+	// Log token usage if verbose
+	if config.Verbose {
+		fmt.Fprintf(os.Stderr, "API response: finish_reason=%s\n", candidate.FinishReason)
+		if geminiResp.UsageMetadata.TotalTokenCount > 0 {
+			fmt.Fprintf(os.Stderr, "Token usage: input=%d output=%d total=%d\n",
+				geminiResp.UsageMetadata.PromptTokenCount,
+				geminiResp.UsageMetadata.CandidatesTokenCount,
+				geminiResp.UsageMetadata.TotalTokenCount)
+		}
 	}
 
 	return jsonText, nil
@@ -572,7 +629,14 @@ func validateAndFormatJSON(config *Config, rawResponse string) (string, error) {
 	var jsonObj interface{}
 	if err := json.Unmarshal([]byte(rawResponse), &jsonObj); err != nil {
 		// If parsing fails, return raw text with validation error
+		if config.Verbose {
+			fmt.Fprintf(os.Stderr, "Validation: response is not valid JSON - FAILED\n")
+		}
 		return rawResponse, &validationError{fmt.Sprintf("response is not valid JSON: %v", err)}
+	}
+
+	if config.Verbose {
+		fmt.Fprintf(os.Stderr, "Validation: response is valid JSON - PASSED\n")
 	}
 
 	// Defensive check for nil compiled schema (should not happen in normal flow)
@@ -583,11 +647,18 @@ func validateAndFormatJSON(config *Config, rawResponse string) (string, error) {
 	// Validate the JSON against the pre-compiled schema
 	if err := config.CompiledSchema.Validate(jsonObj); err != nil {
 		// If validation fails, return formatted JSON with validation error
+		if config.Verbose {
+			fmt.Fprintf(os.Stderr, "Validation: schema validation - FAILED\n")
+		}
 		formattedJSON, formatErr := formatJSON(jsonObj, config.PrettyPrint)
 		if formatErr != nil {
 			return rawResponse, &validationError{fmt.Sprintf("schema validation failed: %v (and formatting failed: %v)", err, formatErr)}
 		}
 		return formattedJSON, &validationError{fmt.Sprintf("schema validation failed: %v", err)}
+	}
+
+	if config.Verbose {
+		fmt.Fprintf(os.Stderr, "Validation: schema validation - PASSED\n")
 	}
 
 	// If validation succeeds, return formatted JSON with no error
@@ -608,12 +679,6 @@ func writeOutput(config *Config, jsonText string) error {
 		fmt.Println(jsonText)
 	}
 	return nil
-}
-
-func logVerbose(config *Config, message string) {
-	if config.Verbose {
-		fmt.Fprintf(os.Stderr, "[verbose] %s\n", message)
-	}
 }
 
 // Error types for different exit codes
