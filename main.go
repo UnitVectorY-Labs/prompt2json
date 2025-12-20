@@ -617,7 +617,7 @@ func callGeminiAPI(config *Config, requestBody []byte) (string, error) {
 		jsonTextBuilder.WriteString(part.Text)
 	}
 	jsonText := jsonTextBuilder.String()
-	
+
 	if jsonText == "" {
 		return "", &validationError{"empty response text"}
 	}
