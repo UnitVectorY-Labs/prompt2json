@@ -35,35 +35,17 @@ The following example is a simple demonstration of how input text can be classif
 
 ```bash
 export GOOGLE_CLOUD_PROJECT=example-project
-echo "this is great" | ./prompt2json \
+echo "this is great" | prompt2json \
     --system-instruction "Classify sentiment" \
     --schema '{"type":"object","properties":{"sentiment":{"type":"string","enum":["POSITIVE","NEGATIVE","NEUTRAL"]},"confidence":{"type":"integer","minimum":0,"maximum":100}},"required":["sentiment","confidence"]}' \
     --location us-central1 \
     --model gemini-2.5-flash
 ```
 
-The output will be minified JSON by default:
+The output will be minified JSON matching the specified schema:
 
 ```json
 {"sentiment":"POSITIVE","confidence":95}
-```
-
-Use `--pretty-print` for human-readable output:
-
-```bash
-echo "this is great" | ./prompt2json \
-    --system-instruction "Classify sentiment" \
-    --schema '{"type":"object","properties":{"sentiment":{"type":"string","enum":["POSITIVE","NEGATIVE","NEUTRAL"]},"confidence":{"type":"integer","minimum":0,"maximum":100}},"required":["sentiment","confidence"]}' \
-    --location us-central1 \
-    --model gemini-2.5-flash \
-    --pretty-print
-```
-
-```json
-{
-  "sentiment": "POSITIVE",
-  "confidence": 95
-}
 ```
 
 ## Usage
@@ -127,16 +109,9 @@ The `prompt2json` CLI follows standard UNIX conventions for input and output to 
 - STDOUT emits the final JSON result when `--out` is not specified
 - STDERR is reserved for logs, errors, and verbose output
 
+The output will always be re-encoded as minified JSON by default unless `--pretty-print` is specified.
+
 Exit status: 0 success, 2 usage, 3 input, 4 validation/response, 5 API/auth
-
-## JSON Processing
-
-The application performs the following JSON processing steps:
-
-- **Parsing**: LLM responses are validated as parsable JSON. If parsing fails, the raw response is returned with exit code 4.
-- **Schema Validation**: Valid JSON is validated against the provided JSON Schema. If validation fails, the JSON is still returned (formatted according to the `--pretty-print` flag) with exit code 4.
-- **Formatting**: JSON output is minified by default. Use `--pretty-print` for human-readable indented formatting.
-- **Error Handling**: Output is always written to stdout/file regardless of validation results to facilitate debugging.
 
 ## Validation rules
 
@@ -145,6 +120,7 @@ The application performs the following JSON processing steps:
 - Prompt is read from a flag or STDIN and must be non empty
 - JSON Schema must be valid and compilable
 - Attachments must be supported types and within size limits
+- The JSON output will be validated against the provided JSON Schema client side before returning
 - Invalid combinations or missing inputs fail before any API call.
 
 ## Limitations
