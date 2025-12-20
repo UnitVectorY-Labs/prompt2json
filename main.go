@@ -47,6 +47,7 @@ var (
 	location              string
 	model                 string
 	verbose               bool
+	prettyPrint           bool
 	showVersion           bool
 	showHelp              bool
 )
@@ -102,12 +103,20 @@ func run() error {
 
 	logVerbose(config, "Received response from Gemini API")
 
-	// Write output
-	if err := writeOutput(config, responseJSON); err != nil {
+	// Validate and format the JSON response
+	formattedJSON, validationErr := validateAndFormatJSON(config, responseJSON)
+
+	// Write output (always write, even if validation fails)
+	if err := writeOutput(config, formattedJSON); err != nil {
 		return err
 	}
 
 	logVerbose(config, "Output written successfully")
+
+	// Return validation error after writing output (to ensure non-zero exit code)
+	if validationErr != nil {
+		return validationErr
+	}
 
 	return nil
 }
@@ -125,6 +134,7 @@ func defineFlags() {
 	flag.StringVar(&location, "location", "", "GCP location/region")
 	flag.StringVar(&model, "model", "", "Gemini model identifier")
 	flag.BoolVar(&verbose, "verbose", false, "Enable verbose logging to STDERR")
+	flag.BoolVar(&prettyPrint, "pretty-print", false, "Pretty-print JSON output")
 	flag.BoolVar(&showVersion, "version", false, "Show version")
 	flag.BoolVar(&showHelp, "help", false, "Show help")
 }
@@ -160,6 +170,7 @@ Input:
 
 Output:
   --out PATH                 Write JSON to file (default: stdout)
+  --pretty-print             Pretty-print JSON output (default: minified)
 
 Misc:
   --verbose                  Log diagnostics to stderr
@@ -171,6 +182,12 @@ Environment (used if option not set):
   --location  GOOGLE_CLOUD_LOCATION, GOOGLE_CLOUD_REGION, CLOUDSDK_COMPUTE_REGION
 
 Exit status: 0 success, 2 usage, 3 input, 4 validation/response, 5 API/auth
+
+JSON Processing:
+  - LLM responses are validated as parsable JSON
+  - Valid JSON is validated against the provided schema
+  - JSON is minified by default; use --pretty-print for human-readable output
+  - Output is always written regardless of validation results for debugging
 
 Example:
   echo "this is great" | prompt2json \
@@ -185,18 +202,21 @@ Example:
 type Config struct {
 	SystemInstruction string
 	Schema            map[string]interface{}
+	SchemaBytes       []byte
 	Prompt            string
 	Project           string
 	Location          string
 	Model             string
 	OutFile           string
 	Verbose           bool
+	PrettyPrint       bool
 }
 
 func loadConfiguration() (*Config, error) {
 	config := &Config{
-		Verbose: verbose,
-		OutFile: outFile,
+		Verbose:     verbose,
+		OutFile:     outFile,
+		PrettyPrint: prettyPrint,
 	}
 
 	// Load system instruction
@@ -244,6 +264,9 @@ func loadConfiguration() (*Config, error) {
 	if err := json.Unmarshal(schemaBytes, &config.Schema); err != nil {
 		return nil, &inputError{fmt.Sprintf("invalid JSON in schema: %v", err)}
 	}
+
+	// Store schema bytes for later validation
+	config.SchemaBytes = schemaBytes
 
 	// Validate it's a valid JSON Schema
 	compiler := jsonschema.NewCompiler()
@@ -521,13 +544,65 @@ func callGeminiAPI(config *Config, requestBody []byte) (string, error) {
 		return "", &validationError{"empty response text"}
 	}
 
-	// Validate it's valid JSON
-	var jsonObj interface{}
-	if err := json.Unmarshal([]byte(jsonText), &jsonObj); err != nil {
-		return "", &validationError{fmt.Sprintf("response is not valid JSON: %v", err)}
+	return jsonText, nil
+}
+
+// formatJSON formats a JSON object as minified or pretty-printed
+func formatJSON(jsonObj interface{}, prettyPrint bool) (string, error) {
+	var formattedBytes []byte
+	var err error
+
+	if prettyPrint {
+		formattedBytes, err = json.MarshalIndent(jsonObj, "", "  ")
+	} else {
+		formattedBytes, err = json.Marshal(jsonObj)
 	}
 
-	return jsonText, nil
+	if err != nil {
+		return "", err
+	}
+
+	return string(formattedBytes), nil
+}
+
+// validateAndFormatJSON parses, validates, and formats JSON from LLM response
+func validateAndFormatJSON(config *Config, rawResponse string) (string, error) {
+	// Try to parse JSON
+	var jsonObj interface{}
+	if err := json.Unmarshal([]byte(rawResponse), &jsonObj); err != nil {
+		// If parsing fails, return raw text with validation error
+		return rawResponse, &validationError{fmt.Sprintf("response is not valid JSON: %v", err)}
+	}
+
+	// Validate against JSON schema
+	compiler := jsonschema.NewCompiler()
+	compiler.Draft = jsonschema.Draft2020
+	schemaURL := "schema.json"
+	if err := compiler.AddResource(schemaURL, bytes.NewReader(config.SchemaBytes)); err != nil {
+		return "", &validationError{fmt.Sprintf("failed to load schema for validation: %v", err)}
+	}
+	compiledSchema, err := compiler.Compile(schemaURL)
+	if err != nil {
+		return "", &validationError{fmt.Sprintf("failed to compile schema for validation: %v", err)}
+	}
+
+	// Validate the JSON against the schema
+	if err := compiledSchema.Validate(jsonObj); err != nil {
+		// If validation fails, return formatted JSON with validation error
+		formattedJSON, formatErr := formatJSON(jsonObj, config.PrettyPrint)
+		if formatErr != nil {
+			return rawResponse, &validationError{fmt.Sprintf("schema validation failed: %v (and formatting failed: %v)", err, formatErr)}
+		}
+		return formattedJSON, &validationError{fmt.Sprintf("schema validation failed: %v", err)}
+	}
+
+	// If validation succeeds, return formatted JSON with no error
+	formattedJSON, err := formatJSON(jsonObj, config.PrettyPrint)
+	if err != nil {
+		return rawResponse, &validationError{fmt.Sprintf("formatting failed: %v", err)}
+	}
+
+	return formattedJSON, nil
 }
 
 func writeOutput(config *Config, jsonText string) error {

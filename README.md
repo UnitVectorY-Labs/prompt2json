@@ -42,10 +42,28 @@ echo "this is great" | ./prompt2json \
     --model gemini-2.5-flash
 ```
 
-The output will be a JSON object returned to the standard output:
+The output will be minified JSON by default:
 
 ```json
-{"sentiment": "POSITIVE", "confidence": 95}
+{"sentiment":"POSITIVE","confidence":95}
+```
+
+Use `--pretty-print` for human-readable output:
+
+```bash
+echo "this is great" | ./prompt2json \
+    --system-instruction "Classify sentiment" \
+    --schema '{"type":"object","properties":{"sentiment":{"type":"string","enum":["POSITIVE","NEGATIVE","NEUTRAL"]},"confidence":{"type":"integer","minimum":0,"maximum":100}},"required":["sentiment","confidence"]}' \
+    --location us-central1 \
+    --model gemini-2.5-flash \
+    --pretty-print
+```
+
+```json
+{
+  "sentiment": "POSITIVE",
+  "confidence": 95
+}
 ```
 
 ## Usage
@@ -87,6 +105,7 @@ export GOOGLE_APPLICATION_CREDENTIALS=/path/to/key.json
 | `--location`               | region| yes      | Environment variable fallback supported             |
 | `--model`                  | name  | yes      | Gemini model id                                     |
 | `--out`                    | path  | no       | Output file path; defaults to STDOUT if not set.    |
+| `--pretty-print`           |       | no       | Pretty-print JSON output; default is minified       |
 | `--verbose`                |       | no       | Logs additional information to STDERR               |
 | `--version`                |       | no       | Print version and exit                              |
 | `--help`                   |       | no       | Print help and exit                                 |
@@ -109,6 +128,15 @@ The `prompt2json` CLI follows standard UNIX conventions for input and output to 
 - STDERR is reserved for logs, errors, and verbose output
 
 Exit status: 0 success, 2 usage, 3 input, 4 validation/response, 5 API/auth
+
+## JSON Processing
+
+The application performs the following JSON processing steps:
+
+- **Parsing**: LLM responses are validated as parsable JSON. If parsing fails, the raw response is returned with exit code 4.
+- **Schema Validation**: Valid JSON is validated against the provided JSON Schema. If validation fails, the JSON is still returned (formatted according to the `--pretty-print` flag) with exit code 4.
+- **Formatting**: JSON output is minified by default. Use `--pretty-print` for human-readable indented formatting.
+- **Error Handling**: Output is always written to stdout/file regardless of validation results to facilitate debugging.
 
 ## Validation rules
 
