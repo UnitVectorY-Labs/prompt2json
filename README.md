@@ -35,17 +35,17 @@ The following example is a simple demonstration of how input text can be classif
 
 ```bash
 export GOOGLE_CLOUD_PROJECT=example-project
-echo "this is great" | ./prompt2json \
+echo "this is great" | prompt2json \
     --system-instruction "Classify sentiment" \
     --schema '{"type":"object","properties":{"sentiment":{"type":"string","enum":["POSITIVE","NEGATIVE","NEUTRAL"]},"confidence":{"type":"integer","minimum":0,"maximum":100}},"required":["sentiment","confidence"]}' \
     --location us-central1 \
     --model gemini-2.5-flash
 ```
 
-The output will be a JSON object returned to the standard output:
+The output will be minified JSON matching the specified schema:
 
 ```json
-{"sentiment": "POSITIVE", "confidence": 95}
+{"sentiment":"POSITIVE","confidence":95}
 ```
 
 ## Usage
@@ -87,6 +87,7 @@ export GOOGLE_APPLICATION_CREDENTIALS=/path/to/key.json
 | `--location`               | region| yes      | Environment variable fallback supported             |
 | `--model`                  | name  | yes      | Gemini model id                                     |
 | `--out`                    | path  | no       | Output file path; defaults to STDOUT if not set.    |
+| `--pretty-print`           |       | no       | Pretty-print JSON output; default is minified       |
 | `--verbose`                |       | no       | Logs additional information to STDERR               |
 | `--version`                |       | no       | Print version and exit                              |
 | `--help`                   |       | no       | Print help and exit                                 |
@@ -108,6 +109,8 @@ The `prompt2json` CLI follows standard UNIX conventions for input and output to 
 - STDOUT emits the final JSON result when `--out` is not specified
 - STDERR is reserved for logs, errors, and verbose output
 
+The output will always be re-encoded as minified JSON by default unless `--pretty-print` is specified.
+
 Exit status: 0 success, 2 usage, 3 input, 4 validation/response, 5 API/auth
 
 ## Validation rules
@@ -117,6 +120,7 @@ Exit status: 0 success, 2 usage, 3 input, 4 validation/response, 5 API/auth
 - Prompt is read from a flag or STDIN and must be non empty
 - JSON Schema must be valid and compilable
 - Attachments must be supported types and within size limits
+- The JSON output will be validated against the provided JSON Schema client side before returning
 - Invalid combinations or missing inputs fail before any API call.
 
 ## Limitations
