@@ -205,7 +205,6 @@ Example:
 type Config struct {
 	SystemInstruction string
 	Schema            map[string]interface{}
-	SchemaBytes       []byte
 	CompiledSchema    *jsonschema.Schema
 	Prompt            string
 	Project           string
@@ -268,9 +267,6 @@ func loadConfiguration() (*Config, error) {
 	if err := json.Unmarshal(schemaBytes, &config.Schema); err != nil {
 		return nil, &inputError{fmt.Sprintf("invalid JSON in schema: %v", err)}
 	}
-
-	// Store schema bytes for later validation
-	config.SchemaBytes = schemaBytes
 
 	// Compile the JSON Schema once for reuse
 	compiler := jsonschema.NewCompiler()
