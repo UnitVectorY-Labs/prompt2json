@@ -105,6 +105,12 @@ func run() error {
 	// Validate and format the JSON response
 	formattedJSON, validationErr := validateAndFormatJSON(config, responseJSON)
 
+	// If validation failed, write error details to STDERR and don't write to STDOUT
+	if validationErr != nil {
+		fmt.Fprintf(os.Stderr, "Validation failed: %v\n", validationErr)
+		return validationErr
+	}
+
 	if config.Verbose {
 		if config.OutFile != "" {
 			fmt.Fprintf(os.Stderr, "Output to: %s\n", config.OutFile)
@@ -113,14 +119,9 @@ func run() error {
 		}
 	}
 
-	// Write output (always write, even if validation fails)
+	// Write output only when validation succeeds
 	if err := writeOutput(config, formattedJSON); err != nil {
 		return err
-	}
-
-	// Return validation error after writing output (to ensure non-zero exit code)
-	if validationErr != nil {
-		return validationErr
 	}
 
 	return nil
@@ -571,7 +572,8 @@ func callGeminiAPI(config *Config, requestBody []byte) (string, error) {
 					Text string `json:"text"`
 				} `json:"parts"`
 			} `json:"content"`
-			FinishReason string `json:"finishReason"`
+			FinishReason  string `json:"finishReason"`
+			FinishMessage string `json:"finishMessage"`
 		} `json:"candidates"`
 		UsageMetadata struct {
 			PromptTokenCount     int `json:"promptTokenCount"`
@@ -592,14 +594,29 @@ func callGeminiAPI(config *Config, requestBody []byte) (string, error) {
 
 	// Check finish reason
 	if candidate.FinishReason != "STOP" {
-		return "", &validationError{fmt.Sprintf("unexpected finish reason: %s", candidate.FinishReason)}
+		// Include finishMessage in error for better diagnostics
+		errorMsg := fmt.Sprintf("unexpected finish reason: %s", candidate.FinishReason)
+		if candidate.FinishMessage != "" {
+			errorMsg = fmt.Sprintf("%s (finishMessage: %s)", errorMsg, candidate.FinishMessage)
+			// Log finishMessage to STDERR even when not in verbose mode
+			fmt.Fprintf(os.Stderr, "Generation stopped: finishReason=%s, finishMessage=%s\n", candidate.FinishReason, candidate.FinishMessage)
+		} else {
+			fmt.Fprintf(os.Stderr, "Generation stopped: finishReason=%s\n", candidate.FinishReason)
+		}
+		return "", &validationError{errorMsg}
 	}
 
 	if len(candidate.Content.Parts) == 0 {
 		return "", &validationError{"no content parts in response"}
 	}
 
-	jsonText := candidate.Content.Parts[0].Text
+	// Concatenate all parts[].text in order
+	var jsonTextBuilder strings.Builder
+	for _, part := range candidate.Content.Parts {
+		jsonTextBuilder.WriteString(part.Text)
+	}
+	jsonText := jsonTextBuilder.String()
+	
 	if jsonText == "" {
 		return "", &validationError{"empty response text"}
 	}
