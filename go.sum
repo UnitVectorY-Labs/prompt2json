@@ -2,6 +2,8 @@ cloud.google.com/go/compute/metadata v0.3.0 h1:Tz+eQXMEqDIKRsmY3cHTL6FVaynIjX2Qx
 cloud.google.com/go/compute/metadata v0.3.0/go.mod h1:zFmK7XCadkQkj6TtorcaGlCW1hT1fIilQDwofLpJ20k=
 github.com/UnitVectorY-Labs/gcpvalidate v0.1.0 h1:oJEj/1/zX1JGXZnDRr4l7FPge57P3K+L7SB7NOP1m7s=
 github.com/UnitVectorY-Labs/gcpvalidate v0.1.0/go.mod h1:I6UAUbCnjktsC+Dn46oWfXc1WFF6XiSN9dmP1+t373E=
+github.com/UnitVectorY-Labs/gcpvalidate v0.1.1 h1:UG8ilP2fSsBWxTCGZVKl3zQZ+3GY1dw2A8AFiuYQ2Ak=
+github.com/UnitVectorY-Labs/gcpvalidate v0.1.1/go.mod h1:I6UAUbCnjktsC+Dn46oWfXc1WFF6XiSN9dmP1+t373E=
 github.com/santhosh-tekuri/jsonschema/v5 v5.3.1 h1:lZUw3E0/J3roVtGQ+SCrUrg3ON6NgVqpn3+iol9aGu4=
 github.com/santhosh-tekuri/jsonschema/v5 v5.3.1/go.mod h1:uToXkOrWAZ6/Oc07xWQrPOhJotwFIyu2bBVN41fcDUY=
 golang.org/x/oauth2 v0.34.0 h1:hqK/t4AKgbqWkdkcAeI8XLmbK+4m4G5YeQRrmiotGlw=
