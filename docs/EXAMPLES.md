@@ -1,7 +1,7 @@
 ---
 layout: default
 title: Examples
-nav_order: 3
+nav_order: 4
 permalink: /examples
 ---
 
@@ -87,7 +87,7 @@ prompt2json \
 
 Load system instructions and JSON schema from files instead of inline strings. This approach is cleaner for complex prompts and reusable schemas.
 
-```classify_instruction.txt```
+`classify_instruction.txt`
 
 ```text
 Categorize the support ticket by department and priority level.
@@ -97,7 +97,7 @@ Use ACCOUNT for login or access problems.
 Use GENERAL for everything else.
 ```
 
-```classify_schema.json```
+`classify_schema.json`
 
 ```json
 {
@@ -137,7 +137,7 @@ cat ticket.txt | prompt2json \
 
 Process files and save output to a file.
 
-```notes.txt`
+`notes.txt`
 
 ```text
 The deployment failed during the final rollout step due to a missing environment variable.
@@ -158,7 +158,7 @@ prompt2json \
 
 **Output:** 
 
-```summary.json```
+`summary.json`
 
 ```json
 {
