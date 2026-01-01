@@ -7,11 +7,11 @@ permalink: /examples
 
 # Examples
 
-Refer to [installation instructions](./INSTALL.md) to set up `prompt2json` and authenticate with Google Cloud project before running these examples.
+Each example demonstrates a different capability. All examples require authentication and project configuration as described in the [installation instructions](./INSTALL.md).
 
-## Text Sentiment Analysis
+## Text Analysis
 
-Classify text sentiment from STDIN. The JSON schema enforces structured output with an enum sentiment field and a numeric confidence score.
+Classify text sentiment from STDIN with inline system instruction and JSON schema with output to STDOUT.
 
 ```bash
 echo "this is great" | prompt2json \
@@ -21,15 +21,15 @@ echo "this is great" | prompt2json \
     --model gemini-2.5-flash
 ```
 
-Output:
+**Output:**
 
 ```json
 {"sentiment":"POSITIVE","confidence":95}
 ```
 
-## Image Character Identification
+## Image Processing
 
-Extract information from an image. This example identifies a character and provides metadata about them.
+Process an image attachment to extract structured information.
 
 ```bash
 prompt2json \
@@ -42,7 +42,7 @@ prompt2json \
     --pretty-print
 ```
 
-Output:
+**Output:**
 
 ```json
 {
@@ -52,35 +52,9 @@ Output:
 }
 ```
 
-## Receipt Data Extraction
+## PDF Processing
 
-Parse a photo of a receipt to extract key transaction details.
-
-```bash
-prompt2json \
-    --prompt "Extract transaction details from this receipt" \
-    --system-instruction "Parse the receipt and extract merchant name, total amount, and transaction date. Use YYYY-MM-DD format for dates." \
-    --schema '{"type":"object","properties":{"merchant":{"type":"string"},"total":{"type":"number"},"date":{"type":"string"},"currency":{"type":"string","enum":["USD","EUR","GBP","CAD"]}},"required":["merchant","total","date"]}' \
-    --attach receipt.jpg \
-    --location us-central1 \
-    --model gemini-2.5-flash \
-    --pretty-print
-```
-
-Output:
-
-```json
-{
-  "merchant": "Corner Coffee Shop",
-  "total": 12.45,
-  "date": "2026-01-01",
-  "currency": "USD"
-}
-```
-
-## Resume PDF Parsing
-
-Extract structured data from a resume PDF for candidate screening.
+Extract structured data from a PDF document.
 
 ```bash
 prompt2json \
@@ -93,7 +67,7 @@ prompt2json \
     --pretty-print
 ```
 
-Output:
+**Output:**
 
 ```json
 {
@@ -109,47 +83,92 @@ Output:
 }
 ```
 
-## Support Ticket Classification
+## Using External Files for Instructions and Schema
 
-Automatically categorize incoming support tickets for routing.
+Load system instructions and JSON schema from files instead of inline strings. This approach is cleaner for complex prompts and reusable schemas.
+
+```classify_instruction.txt```
+
+```text
+Categorize the support ticket by department and priority level.
+Use TECHNICAL for infrastructure or software issues.
+Use BILLING for payment or invoice questions.
+Use ACCOUNT for login or access problems.
+Use GENERAL for everything else.
+```
+
+```classify_schema.json```
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "department": {
+      "type": "string",
+      "enum": ["TECHNICAL", "BILLING", "ACCOUNT", "GENERAL"]
+    },
+    "priority": {
+      "type": "string",
+      "enum": ["LOW", "MEDIUM", "HIGH", "CRITICAL"]
+    },
+    "summary": {
+      "type": "string"
+    }
+  },
+  "required": ["department", "priority", "summary"]
+}
+```
 
 ```bash
 cat ticket.txt | prompt2json \
-    --system-instruction "Categorize the support ticket by type and urgency level" \
-    --schema '{"type":"object","properties":{"category":{"type":"string","enum":["BILLING","TECHNICAL","ACCOUNT","GENERAL"]},"urgency":{"type":"string","enum":["LOW","MEDIUM","HIGH","CRITICAL"]},"summary":{"type":"string"}},"required":["category","urgency","summary"]}' \
+    --system-instruction-file classify_instruction.txt \
+    --schema-file classify_schema.json \
     --location us-central1 \
     --model gemini-2.5-flash
 ```
 
-Output:
+**Output:**
 
 ```json
-{"category":"TECHNICAL","urgency":"HIGH","summary":"User cannot access dashboard after login"}
+{"department":"TECHNICAL","priority":"HIGH","summary":"User cannot access dashboard after login"}
 ```
 
-## PDF Invoice Processing
+## Files for Input and Output
 
-Extract invoice details from a PDF for automated accounting workflows.
+Process files and save output to a file.
+
+```notes.txt`
+
+```text
+The deployment failed during the final rollout step due to a missing environment variable.
+Engineering resolved the issue by updating the configuration and redeploying.
+No customer impact was reported, but the release was delayed by two hours.
+```
 
 ```bash
 prompt2json \
-    --prompt "Extract invoice information" \
-    --system-instruction "Parse the invoice PDF and extract key billing information. Use ISO date format." \
-    --schema '{"type":"object","properties":{"invoice_number":{"type":"string"},"vendor":{"type":"string"},"amount":{"type":"number"},"due_date":{"type":"string"},"line_items":{"type":"integer"}},"required":["invoice_number","vendor","amount"]}' \
-    --attach invoice.pdf \
-    --location us-central1 \
-    --model gemini-2.5-flash \
-    --pretty-print
+  --prompt-file notes.txt \
+  --system-instruction "Summarize the incident and extract key facts for reporting. Keep the summary and key facts concise including the important details. Do not invent details." \
+  --schema '{"type":"object","properties":{"summary":{"type":"string"},"key_facts":{"type":"array","items":{"type":"string"}}},"required":["summary","key_facts"]}' \
+  --location us-central1 \
+  --model gemini-2.5-flash \
+  --pretty-print \
+  --out summary.json
 ```
 
-Output:
+**Output:** 
+
+```summary.json```
 
 ```json
 {
-  "invoice_number": "INV-2026-001",
-  "vendor": "Office Supplies Inc",
-  "amount": 347.82,
-  "due_date": "2026-01-15",
-  "line_items": 5
+  "key_facts": [
+    "Deployment failed during final rollout step.",
+    "Cause: Missing environment variable.",
+    "Resolution: Engineering updated configuration and redeployed.",
+    "Customer Impact: None reported.",
+    "Release Delay: Two hours."
+  ],
+  "summary": "A deployment failed during the final rollout step due to a missing environment variable, causing a two-hour release delay. Engineering resolved the issue with a configuration update and redeployment, and no customer impact was reported."
 }
 ```
