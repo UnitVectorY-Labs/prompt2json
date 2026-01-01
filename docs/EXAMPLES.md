@@ -6,7 +6,12 @@ permalink: /examples
 ---
 
 # Examples
+{: .no_toc }
 
+## Table of Contents
+{: .no_toc .text-delta }
+
+- TOC
 {:toc}
 
 ---
