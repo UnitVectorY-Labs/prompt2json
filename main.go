@@ -14,6 +14,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/UnitVectorY-Labs/gcpvalidate/location"
+	"github.com/UnitVectorY-Labs/gcpvalidate/project"
+	"github.com/UnitVectorY-Labs/gcpvalidate/vertexai"
 	"github.com/santhosh-tekuri/jsonschema/v5"
 	"golang.org/x/oauth2/google"
 )
@@ -47,9 +50,9 @@ var (
 	promptFile            string
 	attachments           []string
 	outFile               string
-	project               string
-	location              string
-	model                 string
+	projectFlag           string
+	locationFlag          string
+	modelFlag             string
 	timeout               int
 	verbose               bool
 	prettyPrint           bool
@@ -135,9 +138,9 @@ func defineFlags() {
 	flag.StringVar(&promptFile, "prompt-file", "", "Prompt from file")
 	flag.Var((*stringArrayValue)(&attachments), "attach", "Attach file (repeatable)")
 	flag.StringVar(&outFile, "out", "", "Output file path (default: STDOUT)")
-	flag.StringVar(&project, "project", "", "GCP project ID")
-	flag.StringVar(&location, "location", "", "GCP location/region")
-	flag.StringVar(&model, "model", "", "Gemini model identifier")
+	flag.StringVar(&projectFlag, "project", "", "GCP project ID")
+	flag.StringVar(&locationFlag, "location", "", "GCP location/region")
+	flag.StringVar(&modelFlag, "model", "", "Gemini model identifier")
 	flag.IntVar(&timeout, "timeout", 60, "HTTP request timeout in seconds (default: 60)")
 	flag.BoolVar(&verbose, "verbose", false, "Enable verbose logging to STDERR")
 	flag.BoolVar(&prettyPrint, "pretty-print", false, "Pretty-print JSON output")
@@ -354,19 +357,34 @@ func loadConfiguration() (*Config, error) {
 	}
 
 	// Load project, location, model with environment fallback
-	config.Project = getConfigValue(project, "GOOGLE_CLOUD_PROJECT", "CLOUDSDK_CORE_PROJECT")
+	config.Project = getConfigValue(projectFlag, "GOOGLE_CLOUD_PROJECT", "CLOUDSDK_CORE_PROJECT")
 	if config.Project == "" {
 		return nil, &cliError{"--project is required (or set GOOGLE_CLOUD_PROJECT)"}
 	}
 
-	config.Location = getConfigValue(location, "GOOGLE_CLOUD_LOCATION", "GOOGLE_CLOUD_REGION", "CLOUDSDK_COMPUTE_REGION")
+	// Validate project ID
+	if !project.IsValidProjectID(config.Project) {
+		return nil, &inputError{fmt.Sprintf("invalid GCP project ID: %s", config.Project)}
+	}
+
+	config.Location = getConfigValue(locationFlag, "GOOGLE_CLOUD_LOCATION", "GOOGLE_CLOUD_REGION", "CLOUDSDK_COMPUTE_REGION")
 	if config.Location == "" {
 		return nil, &cliError{"--location is required (or set GOOGLE_CLOUD_LOCATION)"}
 	}
 
-	config.Model = model
+	// Validate region
+	if !location.IsValidRegion(config.Location) {
+		return nil, &inputError{fmt.Sprintf("invalid GCP region: %s", config.Location)}
+	}
+
+	config.Model = getConfigValue(modelFlag)
 	if config.Model == "" {
 		return nil, &cliError{"--model is required"}
+	}
+
+	// Validate model name
+	if !vertexai.IsValidVertexModelName(config.Model) {
+		return nil, &inputError{fmt.Sprintf("invalid Vertex AI model name: %s", config.Model)}
 	}
 
 	// Validate timeout
