@@ -7,6 +7,10 @@ permalink: /examples
 
 # Examples
 
+{:toc}
+
+---
+
 Each example demonstrates a different capability. All examples require authentication and project configuration as described in the [installation instructions](./INSTALL.md).
 
 ## Text Analysis
