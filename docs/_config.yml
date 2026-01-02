@@ -5,6 +5,22 @@ remote_theme: just-the-docs/just-the-docs@v0.10.2
 plugins:
   - jekyll-remote-theme
 
+callouts:
+  highlight:
+    color: yellow
+  important:
+    title: Important
+    color: blue
+  new:
+    title: New
+    color: green
+  note:
+    title: Note
+    color: purple
+  warning:
+    title: Warning
+    color: red
+
 # External navigation links
 nav_external_links:
   - title: prompt2json on GitHub
