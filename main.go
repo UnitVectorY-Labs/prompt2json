@@ -372,8 +372,8 @@ func loadConfiguration() (*Config, error) {
 		return nil, &cliError{"--location is required (or set GOOGLE_CLOUD_LOCATION)"}
 	}
 
-	// Validate region
-	if !location.IsValidRegion(config.Location) {
+	// Validate region (allow "global" for Vertex AI models that are only available globally)
+	if config.Location != "global" && !location.IsValidRegion(config.Location) {
 		return nil, &inputError{fmt.Sprintf("invalid GCP region: %s", config.Location)}
 	}
 
@@ -540,8 +540,16 @@ func callGeminiAPI(config *Config, requestBody []byte) (string, error) {
 	}
 
 	// Build URL
-	url := fmt.Sprintf("https://%s-aiplatform.googleapis.com/v1/projects/%s/locations/%s/publishers/google/models/%s:generateContent",
-		config.Location, config.Project, config.Location, config.Model)
+	// For global region, use aiplatform.googleapis.com (no region prefix)
+	// For regional endpoints, use {region}-aiplatform.googleapis.com
+	var url string
+	if config.Location == "global" {
+		url = fmt.Sprintf("https://aiplatform.googleapis.com/v1/projects/%s/locations/%s/publishers/google/models/%s:generateContent",
+			config.Project, config.Location, config.Model)
+	} else {
+		url = fmt.Sprintf("https://%s-aiplatform.googleapis.com/v1/projects/%s/locations/%s/publishers/google/models/%s:generateContent",
+			config.Location, config.Project, config.Location, config.Model)
+	}
 
 	if config.Verbose {
 		fmt.Fprintf(os.Stderr, "Request: POST %s\n", url)

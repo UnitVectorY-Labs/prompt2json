@@ -18,6 +18,9 @@ permalink: /examples
 
 Each example demonstrates a different capability. All examples require authentication and project configuration as described in the [installation instructions](./INSTALL.md).
 
+{: .highlight }
+The models used in these examples may change over time. Refer to Google's [latest stable models](https://docs.cloud.google.com/vertex-ai/generative-ai/docs/learn/model-versions#latest-stable) for the latest list of available models.
+
 ## Text Analysis
 
 Classify text sentiment from STDIN with inline system instruction and JSON schema with output to STDOUT.
@@ -26,7 +29,7 @@ Classify text sentiment from STDIN with inline system instruction and JSON schem
 echo "this is great" | prompt2json \
     --system-instruction "Classify sentiment as POSITIVE, NEGATIVE, or NEUTRAL" \
     --schema '{"type":"object","properties":{"sentiment":{"type":"string","enum":["POSITIVE","NEGATIVE","NEUTRAL"]},"confidence":{"type":"integer","minimum":0,"maximum":100}},"required":["sentiment","confidence"]}' \
-    --location us-central1 \
+    --location global \
     --model gemini-2.5-flash
 ```
 
