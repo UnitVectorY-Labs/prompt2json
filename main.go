@@ -58,6 +58,8 @@ var (
 	prettyPrint           bool
 	showVersion           bool
 	showHelp              bool
+	showURL               bool
+	showRequestBody       bool
 )
 
 func main() {
@@ -97,6 +99,32 @@ func run() error {
 	requestBody, err := buildGeminiRequest(config, attachmentParts)
 	if err != nil {
 		return err
+	}
+
+	// Handle dry-run modes
+	if showURL {
+		url := buildGeminiURL(config)
+		if err := writeOutput(config, url); err != nil {
+			return err
+		}
+		return nil
+	}
+
+	if showRequestBody {
+		var formattedRequest string
+		if prettyPrint {
+			prettyJSON, err := formatJSONBytes(requestBody, true)
+			if err != nil {
+				return &inputError{fmt.Sprintf("failed to format request body: %v", err)}
+			}
+			formattedRequest = prettyJSON
+		} else {
+			formattedRequest = string(requestBody)
+		}
+		if err := writeOutput(config, formattedRequest); err != nil {
+			return err
+		}
+		return nil
 	}
 
 	// Call Gemini API
@@ -146,6 +174,8 @@ func defineFlags() {
 	flag.BoolVar(&prettyPrint, "pretty-print", false, "Pretty-print JSON output")
 	flag.BoolVar(&showVersion, "version", false, "Show version")
 	flag.BoolVar(&showHelp, "help", false, "Show help")
+	flag.BoolVar(&showURL, "show-url", false, "Show the API URL that would be called (dry-run mode)")
+	flag.BoolVar(&showRequestBody, "show-request-body", false, "Show the JSON request body that would be sent (dry-run mode)")
 }
 
 type stringArrayValue []string
@@ -180,6 +210,10 @@ Input:
 Output:
   --out PATH                 Write JSON to file (default: stdout)
   --pretty-print             Pretty-print JSON output (default: minified)
+
+Dry-run (debug):
+  --show-url                 Output the API URL without making the request
+  --show-request-body        Output the JSON request body without making the request
 
 Misc:
   --timeout SECONDS          HTTP request timeout in seconds (default: 60)
@@ -525,6 +559,39 @@ func buildGeminiRequest(config *Config, attachmentParts []interface{}) ([]byte, 
 	return requestBytes, nil
 }
 
+func buildGeminiURL(config *Config) string {
+	// Build URL
+	// For global region, use aiplatform.googleapis.com (no region prefix)
+	// For regional endpoints, use {region}-aiplatform.googleapis.com
+	var url string
+	if config.Location == "global" {
+		url = fmt.Sprintf("https://aiplatform.googleapis.com/v1/projects/%s/locations/%s/publishers/google/models/%s:generateContent",
+			config.Project, config.Location, config.Model)
+	} else {
+		url = fmt.Sprintf("https://%s-aiplatform.googleapis.com/v1/projects/%s/locations/%s/publishers/google/models/%s:generateContent",
+			config.Location, config.Project, config.Location, config.Model)
+	}
+	return url
+}
+
+func formatJSONBytes(jsonBytes []byte, prettyPrint bool) (string, error) {
+	if !prettyPrint {
+		return string(jsonBytes), nil
+	}
+
+	var jsonObj interface{}
+	if err := json.Unmarshal(jsonBytes, &jsonObj); err != nil {
+		return "", err
+	}
+
+	prettyBytes, err := json.MarshalIndent(jsonObj, "", "  ")
+	if err != nil {
+		return "", err
+	}
+
+	return string(prettyBytes), nil
+}
+
 func callGeminiAPI(config *Config, requestBody []byte) (string, error) {
 	ctx := context.Background()
 
@@ -540,16 +607,7 @@ func callGeminiAPI(config *Config, requestBody []byte) (string, error) {
 	}
 
 	// Build URL
-	// For global region, use aiplatform.googleapis.com (no region prefix)
-	// For regional endpoints, use {region}-aiplatform.googleapis.com
-	var url string
-	if config.Location == "global" {
-		url = fmt.Sprintf("https://aiplatform.googleapis.com/v1/projects/%s/locations/%s/publishers/google/models/%s:generateContent",
-			config.Project, config.Location, config.Model)
-	} else {
-		url = fmt.Sprintf("https://%s-aiplatform.googleapis.com/v1/projects/%s/locations/%s/publishers/google/models/%s:generateContent",
-			config.Location, config.Project, config.Location, config.Model)
-	}
+	url := buildGeminiURL(config)
 
 	if config.Verbose {
 		fmt.Fprintf(os.Stderr, "Request: POST %s\n", url)

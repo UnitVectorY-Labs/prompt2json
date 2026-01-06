@@ -200,3 +200,87 @@ prompt2json \
   "summary": "A deployment failed during the final rollout step due to a missing environment variable, causing a two-hour release delay. Engineering resolved the issue with a configuration update and redeployment, and no customer impact was reported."
 }
 ```
+
+## Dry-run: Show Request URL
+
+Output the API URL that would be called without making the actual request. This is useful for debugging API endpoint configuration and understanding how the URL is constructed.
+
+```bash
+echo "this is great" | prompt2json \
+    --system-instruction "Classify sentiment" \
+    --schema '{"type":"object","properties":{"sentiment":{"type":"string","enum":["POSITIVE","NEGATIVE","NEUTRAL"]},"confidence":{"type":"integer","minimum":0,"maximum":100}},"required":["sentiment","confidence"]}' \
+    --project example-project \
+    --location us-central1 \
+    --model gemini-2.5-flash \
+    --show-url
+```
+
+**Output:**
+
+```
+https://us-central1-aiplatform.googleapis.com/v1/projects/example-project/locations/us-central1/publishers/google/models/gemini-2.5-flash:generateContent
+```
+
+## Dry-run: Show Request Body
+
+Output the JSON request body that would be sent to the API without making the actual request. This is useful for debugging request structure and verifying the prompt, schema, and attachments are formatted correctly.
+
+```bash
+echo "this is great" | prompt2json \
+    --system-instruction "Classify sentiment" \
+    --schema '{"type":"object","properties":{"sentiment":{"type":"string","enum":["POSITIVE","NEGATIVE","NEUTRAL"]},"confidence":{"type":"integer","minimum":0,"maximum":100}},"required":["sentiment","confidence"]}' \
+    --project example-project \
+    --location us-central1 \
+    --model gemini-2.5-flash \
+    --show-request-body \
+    --pretty-print
+```
+
+**Output:**
+
+```json
+{
+  "systemInstruction": {
+    "parts": [
+      {
+        "text": "Classify sentiment"
+      }
+    ]
+  },
+  "contents": [
+    {
+      "role": "user",
+      "parts": [
+        {
+          "text": "this is great"
+        }
+      ]
+    }
+  ],
+  "generationConfig": {
+    "responseMimeType": "application/json",
+    "responseJsonSchema": {
+      "type": "object",
+      "properties": {
+        "sentiment": {
+          "type": "string",
+          "enum": [
+            "POSITIVE",
+            "NEGATIVE",
+            "NEUTRAL"
+          ]
+        },
+        "confidence": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 100
+        }
+      },
+      "required": [
+        "sentiment",
+        "confidence"
+      ]
+    }
+  }
+}
+```
