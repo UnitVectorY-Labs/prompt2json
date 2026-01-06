@@ -7,7 +7,6 @@ plugins:
 
 callouts:
   highlight:
-    title: Highlight
     color: yellow
   important:
     title: Important
