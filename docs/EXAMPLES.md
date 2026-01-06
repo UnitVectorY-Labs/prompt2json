@@ -203,7 +203,10 @@ prompt2json \
 
 ## Dry-run: Show Request URL
 
-Output the API URL that would be called without making the actual request. This is useful for debugging API endpoint configuration and understanding how the URL is constructed.
+Output the API URL that that is used when making the request to Gemini models.  This is useful for debugging and understanding which endpoint is being targeted.
+
+{: .note }
+The actual request is not made when using the `--show-url` flag.
 
 ```bash
 echo "this is great" | prompt2json \
@@ -223,7 +226,11 @@ https://us-central1-aiplatform.googleapis.com/v1/projects/example-project/locati
 
 ## Dry-run: Show Request Body
 
-Output the JSON request body that would be sent to the API without making the actual request. This is useful for debugging request structure and verifying the prompt, schema, and attachments are formatted correctly.
+Output the JSON request body that would be sent to the Gemini API. This is useful for debugging request structure and verifying the prompt, schema, and attachments are formatted correctly.
+
+{: .note }
+The actual request is not made when using the `--show-request-body` flag.
+The `--pretty-print` flag formats the JSON output for better readability.
 
 ```bash
 echo "this is great" | prompt2json \
@@ -249,38 +256,38 @@ echo "this is great" | prompt2json \
   },
   "contents": [
     {
-      "role": "user",
       "parts": [
         {
           "text": "this is great"
         }
-      ]
+      ],
+      "role": "user"
     }
   ],
   "generationConfig": {
-    "responseMimeType": "application/json",
     "responseJsonSchema": {
-      "type": "object",
       "properties": {
+        "confidence": {
+          "maximum": 100,
+          "minimum": 0,
+          "type": "integer"
+        },
         "sentiment": {
-          "type": "string",
           "enum": [
             "POSITIVE",
             "NEGATIVE",
             "NEUTRAL"
-          ]
-        },
-        "confidence": {
-          "type": "integer",
-          "minimum": 0,
-          "maximum": 100
+          ],
+          "type": "string"
         }
       },
       "required": [
         "sentiment",
         "confidence"
-      ]
-    }
+      ],
+      "type": "object"
+    },
+    "responseMimeType": "application/json"
   }
 }
 ```

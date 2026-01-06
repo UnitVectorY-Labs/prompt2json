@@ -28,7 +28,7 @@ prompt2json [OPTIONS]
 | `--location`               | region| yes      | Environment variable fallback supported             |
 | `--model`                  | name  | yes      | Gemini model id                                     |
 | `--timeout`                | int   | no       | HTTP request timeout in seconds; default is 60      |
-| `--out`                    | path  | no       | Output file path; defaults to STDOUT if not set.    |
+| `--out`                    | path  | no       | Output file path; defaults to STDOUT if not set     |
 | `--pretty-print`           |       | no       | Pretty-print JSON output; default is minified       |
 | `--show-url`               |       | no       | Output the API URL without making the request       |
 | `--show-request-body`      |       | no       | Output the JSON request body without making request |
