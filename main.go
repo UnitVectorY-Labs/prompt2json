@@ -111,15 +111,16 @@ func run() error {
 	}
 
 	if showRequestBody {
-		// Parse request body to use formatJSON
-		var requestObj interface{}
-		if err := json.Unmarshal(requestBody, &requestObj); err != nil {
-			return &inputError{fmt.Sprintf("failed to parse request body: %v", err)}
-		}
-
-		formattedRequest, err := formatJSON(requestObj, prettyPrint)
-		if err != nil {
-			return &inputError{fmt.Sprintf("failed to format request body: %v", err)}
+		var formattedRequest string
+		if prettyPrint {
+			// Pretty-print the request body using json.Indent
+			var prettyBuf bytes.Buffer
+			if err := json.Indent(&prettyBuf, requestBody, "", "  "); err != nil {
+				return &inputError{fmt.Sprintf("failed to format request body: %v", err)}
+			}
+			formattedRequest = prettyBuf.String()
+		} else {
+			formattedRequest = string(requestBody)
 		}
 
 		if err := writeOutput(config, formattedRequest); err != nil {
@@ -561,7 +562,6 @@ func buildGeminiRequest(config *Config, attachmentParts []interface{}) ([]byte, 
 }
 
 func buildGeminiURL(config *Config) string {
-	// Build URL
 	// For global region, use aiplatform.googleapis.com (no region prefix)
 	// For regional endpoints, use {region}-aiplatform.googleapis.com
 	var url string
