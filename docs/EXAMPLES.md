@@ -200,3 +200,94 @@ prompt2json \
   "summary": "A deployment failed during the final rollout step due to a missing environment variable, causing a two-hour release delay. Engineering resolved the issue with a configuration update and redeployment, and no customer impact was reported."
 }
 ```
+
+## Dry-run: Show Request URL
+
+Output the API URL that that is used when making the request to Gemini models.  This is useful for debugging and understanding which endpoint is being targeted.
+
+{: .note }
+The actual request is not made when using the `--show-url` flag.
+
+```bash
+echo "this is great" | prompt2json \
+    --system-instruction "Classify sentiment" \
+    --schema '{"type":"object","properties":{"sentiment":{"type":"string","enum":["POSITIVE","NEGATIVE","NEUTRAL"]},"confidence":{"type":"integer","minimum":0,"maximum":100}},"required":["sentiment","confidence"]}' \
+    --project example-project \
+    --location us-central1 \
+    --model gemini-2.5-flash \
+    --show-url
+```
+
+**Output:**
+
+```
+https://us-central1-aiplatform.googleapis.com/v1/projects/example-project/locations/us-central1/publishers/google/models/gemini-2.5-flash:generateContent
+```
+
+## Dry-run: Show Request Body
+
+Output the JSON request body that would be sent to the Gemini API. This is useful for debugging request structure and verifying the prompt, schema, and attachments are formatted correctly.
+
+{: .note }
+The actual request is not made when using the `--show-request-body` flag.
+The `--pretty-print` flag formats the JSON output for better readability.
+
+```bash
+echo "this is great" | prompt2json \
+    --system-instruction "Classify sentiment" \
+    --schema '{"type":"object","properties":{"sentiment":{"type":"string","enum":["POSITIVE","NEGATIVE","NEUTRAL"]},"confidence":{"type":"integer","minimum":0,"maximum":100}},"required":["sentiment","confidence"]}' \
+    --project example-project \
+    --location us-central1 \
+    --model gemini-2.5-flash \
+    --show-request-body \
+    --pretty-print
+```
+
+**Output:**
+
+```json
+{
+  "systemInstruction": {
+    "parts": [
+      {
+        "text": "Classify sentiment"
+      }
+    ]
+  },
+  "contents": [
+    {
+      "parts": [
+        {
+          "text": "this is great"
+        }
+      ],
+      "role": "user"
+    }
+  ],
+  "generationConfig": {
+    "responseJsonSchema": {
+      "properties": {
+        "confidence": {
+          "maximum": 100,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "sentiment": {
+          "enum": [
+            "POSITIVE",
+            "NEGATIVE",
+            "NEUTRAL"
+          ],
+          "type": "string"
+        }
+      },
+      "required": [
+        "sentiment",
+        "confidence"
+      ],
+      "type": "object"
+    },
+    "responseMimeType": "application/json"
+  }
+}
+```

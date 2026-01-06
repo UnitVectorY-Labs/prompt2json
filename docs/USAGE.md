@@ -28,8 +28,10 @@ prompt2json [OPTIONS]
 | `--location`               | region| yes      | Environment variable fallback supported             |
 | `--model`                  | name  | yes      | Gemini model id                                     |
 | `--timeout`                | int   | no       | HTTP request timeout in seconds; default is 60      |
-| `--out`                    | path  | no       | Output file path; defaults to STDOUT if not set.    |
+| `--out`                    | path  | no       | Output file path; defaults to STDOUT if not set     |
 | `--pretty-print`           |       | no       | Pretty-print JSON output; default is minified       |
+| `--show-url`               |       | no       | Output the API URL without making the request       |
+| `--show-request-body`      |       | no       | Output the JSON request body without making request |
 | `--verbose`                |       | no       | Logs additional information to STDERR               |
 | `--version`                |       | no       | Print version and exit                              |
 | `--help`                   |       | no       | Print help and exit                                 |
@@ -54,6 +56,19 @@ The `prompt2json` CLI follows standard UNIX conventions for input and output to 
 The output will always be re-encoded as minified JSON by default unless `--pretty-print` is specified.
 
 Exit status: 0 success, 2 usage, 3 input, 4 validation/response, 5 API/auth
+
+## Dry-run Modes
+
+The dry-run options allow you to inspect the API request that would be made without actually sending it to the Gemini API. These are useful for debugging, testing, and understanding the exact request structure.
+
+- `--show-url` outputs the complete URL endpoint that would be called
+- `--show-request-body` outputs the JSON payload that would be sent in the request body
+
+When using either dry-run option:
+- The API request is not performed
+- No authentication is required
+- Output goes to STDOUT or the file specified by `--out`
+- The `--pretty-print` flag can be used with `--show-request-body` to format the JSON
 
 ## Validation rules
 
