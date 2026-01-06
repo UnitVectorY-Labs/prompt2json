@@ -111,16 +111,17 @@ func run() error {
 	}
 
 	if showRequestBody {
-		var formattedRequest string
-		if prettyPrint {
-			prettyJSON, err := formatJSONBytes(requestBody, true)
-			if err != nil {
-				return &inputError{fmt.Sprintf("failed to format request body: %v", err)}
-			}
-			formattedRequest = prettyJSON
-		} else {
-			formattedRequest = string(requestBody)
+		// Parse request body to use formatJSON
+		var requestObj interface{}
+		if err := json.Unmarshal(requestBody, &requestObj); err != nil {
+			return &inputError{fmt.Sprintf("failed to parse request body: %v", err)}
 		}
+
+		formattedRequest, err := formatJSON(requestObj, prettyPrint)
+		if err != nil {
+			return &inputError{fmt.Sprintf("failed to format request body: %v", err)}
+		}
+
 		if err := writeOutput(config, formattedRequest); err != nil {
 			return err
 		}
@@ -572,24 +573,6 @@ func buildGeminiURL(config *Config) string {
 			config.Location, config.Project, config.Location, config.Model)
 	}
 	return url
-}
-
-func formatJSONBytes(jsonBytes []byte, prettyPrint bool) (string, error) {
-	if !prettyPrint {
-		return string(jsonBytes), nil
-	}
-
-	var jsonObj interface{}
-	if err := json.Unmarshal(jsonBytes, &jsonObj); err != nil {
-		return "", err
-	}
-
-	prettyBytes, err := json.MarshalIndent(jsonObj, "", "  ")
-	if err != nil {
-		return "", err
-	}
-
-	return string(prettyBytes), nil
 }
 
 func callGeminiAPI(config *Config, requestBody []byte) (string, error) {
