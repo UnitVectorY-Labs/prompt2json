@@ -7,7 +7,13 @@ permalink: /install
 
 # Installation
 
-## Using Go
+## Download Binary
+
+Download pre-built binaries from the [GitHub Releases](https://github.com/UnitVectorY-Labs/prompt2json/releases) page.
+
+Choose the appropriate binary for your platform and add it to your PATH.
+
+## InstallUsing Go
 
 Install directly from the Go toolchain:
 
@@ -15,11 +21,15 @@ Install directly from the Go toolchain:
 go install github.com/UnitVectorY-Labs/prompt2json@latest
 ```
 
-## Download Binary
+## Build from Source
 
-Download pre-built binaries from the [GitHub Releases](https://github.com/UnitVectorY-Labs/prompt2json/releases) page.
+Build the application from source code:
 
-Choose the appropriate binary for your platform and add it to your PATH.
+```bash
+git clone https://github.com/UnitVectorY-Labs/prompt2json.git
+cd prompt2json
+go build -o prompt2json
+```
 
 ## Authentication
 
@@ -40,7 +50,7 @@ Or use a service account:
 export GOOGLE_APPLICATION_CREDENTIALS=/path/to/key.json
 ```
 
-Set your project:
+Set your project (can be specified with `--project` flag as well):
 
 ```bash
 export GOOGLE_CLOUD_PROJECT=your-project-id

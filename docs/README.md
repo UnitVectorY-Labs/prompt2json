@@ -16,6 +16,8 @@ Unix-style CLI that brings English-as-Code to your command line. Define behavior
 - Make Gemini usable in shell pipelines, scripts, and data processing jobs
 - Enable repeatable, inspectable prompt experiments from the command line
 - Treat LLM calls as deterministic interfaces, not interactive sessions
+- Supports plain text, images, and PDFs as input
+- Leverages Google Gemini models with Vertex AI
 
 ![prompt2json diagram](diagram.svg)
 

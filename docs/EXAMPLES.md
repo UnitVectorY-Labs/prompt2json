@@ -25,6 +25,9 @@ The models used in these examples may change over time. Refer to Google's [lates
 
 Classify text sentiment from STDIN with inline system instruction and JSON schema with output to STDOUT.
 
+{: .note }
+System instructions and schema can be provided as inline strings or loaded from external files as shown in later examples.
+
 ```bash
 echo "this is great" | prompt2json \
     --system-instruction "Classify sentiment as POSITIVE, NEGATIVE, or NEUTRAL" \
@@ -42,6 +45,9 @@ echo "this is great" | prompt2json \
 ## Image Processing
 
 Process an image attachment to extract structured information.
+
+{: .note }
+Attach a file using the `--attach` flag for the LLM to process directly. Supported formats include `.png`, `.jpg`, `.jpeg`, `.webp`, and `.pdf`.
 
 ```bash
 prompt2json \
@@ -99,6 +105,9 @@ prompt2json \
 
 Load system instructions and JSON schema from files instead of inline strings. This approach is cleaner for complex prompts and reusable schemas.
 
+{: .note }
+Instructions file can be stored as a separate text file that is referenced.
+
 `classify_instruction.txt`
 
 ```text
@@ -108,6 +117,9 @@ Use BILLING for payment or invoice questions.
 Use ACCOUNT for login or access problems.
 Use GENERAL for everything else.
 ```
+
+{: .note }
+Schema file can be stored as a separate JSON file that is referenced.
 
 `classify_schema.json`
 
@@ -148,6 +160,10 @@ cat ticket.txt | prompt2json \
 ## Files for Input and Output
 
 Process files and save output to a file.
+
+
+{: .note }
+Input file can contain any plain text content to be passed as the prompt.
 
 `notes.txt`
 
