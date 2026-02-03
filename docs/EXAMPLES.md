@@ -16,12 +16,12 @@ permalink: /examples
 
 ---
 
-Each example demonstrates a different capability. All examples require authentication and project configuration as described in the [installation instructions](./INSTALL.md).
+Each example demonstrates a different capability. Examples using the Gemini provider require Google Cloud authentication as described in the [installation instructions](./INSTALL.md). Examples using the OpenAPI provider require an API key.
 
 {: .highlight }
-The models used in these examples may change over time. Refer to Google's [latest stable models](https://docs.cloud.google.com/vertex-ai/generative-ai/docs/learn/model-versions#latest-stable) for the latest list of available models.
+The models used in these examples may change over time. Refer to [Google's latest stable models](https://docs.cloud.google.com/vertex-ai/generative-ai/docs/learn/model-versions#latest-stable) for Gemini and [OpenAI's models](https://platform.openai.com/docs/models) for OpenAI.
 
-## Text Analysis
+## Text Analysis (Gemini)
 
 Classify text sentiment from STDIN with inline system instruction and JSON schema with output to STDOUT.
 
@@ -42,12 +42,31 @@ echo "this is great" | prompt2json \
 {"sentiment":"POSITIVE","confidence":95}
 ```
 
-## Image Processing
+## Text Analysis (OpenAPI)
+
+The same text classification using an OpenAI-compatible endpoint.
+
+```bash
+echo "this is great" | prompt2json \
+    --provider openapi \
+    --system-instruction "Classify sentiment as POSITIVE, NEGATIVE, or NEUTRAL" \
+    --schema '{"type":"object","properties":{"sentiment":{"type":"string","enum":["POSITIVE","NEGATIVE","NEUTRAL"]},"confidence":{"type":"integer","minimum":0,"maximum":100}},"required":["sentiment","confidence"]}' \
+    --model gpt-4o \
+    --api-key "$OPENAI_API_KEY"
+```
+
+**Output:**
+
+```json
+{"sentiment":"POSITIVE","confidence":95}
+```
+
+## Image Processing (Gemini only)
 
 Process an image attachment to extract structured information.
 
 {: .note }
-Attach a file using the `--attach` flag for the LLM to process directly. Supported formats include `.png`, `.jpg`, `.jpeg`, `.webp`, and `.pdf`.
+Attach a file using the `--attach` flag for the LLM to process directly. Supported formats include `.png`, `.jpg`, `.jpeg`, `.webp`, and `.pdf`. Attachments are only supported with the Gemini provider.
 
 ```bash
 prompt2json \
@@ -203,10 +222,12 @@ prompt2json \
 
 ## Dry-run: Show Request URL
 
-Output the API URL that that is used when making the request to Gemini models.  This is useful for debugging and understanding which endpoint is being targeted.
+Output the API URL that is used when making the request. This is useful for debugging and understanding which endpoint is being targeted.
 
 {: .note }
 The actual request is not made when using the `--show-url` flag.
+
+### Gemini URL
 
 ```bash
 echo "this is great" | prompt2json \
@@ -224,13 +245,32 @@ echo "this is great" | prompt2json \
 https://us-central1-aiplatform.googleapis.com/v1/projects/example-project/locations/us-central1/publishers/google/models/gemini-2.5-flash:generateContent
 ```
 
+### OpenAPI URL
+
+```bash
+echo "this is great" | prompt2json \
+    --provider openapi \
+    --system-instruction "Classify sentiment" \
+    --schema '{"type":"object","properties":{"sentiment":{"type":"string"}},"required":["sentiment"]}' \
+    --model gpt-4o \
+    --show-url
+```
+
+**Output:**
+
+```
+https://api.openai.com/v1/chat/completions
+```
+
 ## Dry-run: Show Request Body
 
-Output the JSON request body that would be sent to the Gemini API. This is useful for debugging request structure and verifying the prompt, schema, and attachments are formatted correctly.
+Output the JSON request body that would be sent to the API. This is useful for debugging request structure and verifying the prompt and schema are formatted correctly.
 
 {: .note }
 The actual request is not made when using the `--show-request-body` flag.
 The `--pretty-print` flag formats the JSON output for better readability.
+
+### Gemini Request Body
 
 ```bash
 echo "this is great" | prompt2json \
@@ -288,6 +328,54 @@ echo "this is great" | prompt2json \
       "type": "object"
     },
     "responseMimeType": "application/json"
+  }
+}
+```
+
+### OpenAPI Request Body
+
+```bash
+echo "this is great" | prompt2json \
+    --provider openapi \
+    --system-instruction "Classify sentiment" \
+    --schema '{"type":"object","properties":{"sentiment":{"type":"string"}},"required":["sentiment"]}' \
+    --model gpt-4o \
+    --show-request-body \
+    --pretty-print
+```
+
+**Output:**
+
+```json
+{
+  "messages": [
+    {
+      "content": "Classify sentiment",
+      "role": "system"
+    },
+    {
+      "content": "this is great",
+      "role": "user"
+    }
+  ],
+  "model": "gpt-4o",
+  "response_format": {
+    "json_schema": {
+      "name": "response",
+      "schema": {
+        "properties": {
+          "sentiment": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "sentiment"
+        ],
+        "type": "object"
+      },
+      "strict": true
+    },
+    "type": "json_schema"
   }
 }
 ```

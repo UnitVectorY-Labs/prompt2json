@@ -13,13 +13,22 @@ Unix-style CLI that brings English-as-Code to your command line. Define behavior
 
 - Turn free form prompts into machine reliable JSON for automation and batch workflows
 - Enforce output shape using JSON Schema rather than post processing heuristics
-- Make Gemini usable in shell pipelines, scripts, and data processing jobs
+- Make LLMs usable in shell pipelines, scripts, and data processing jobs
 - Enable repeatable, inspectable prompt experiments from the command line
 - Treat LLM calls as deterministic interfaces, not interactive sessions
-- Supports plain text, images, and PDFs as input
-- Leverages Google Gemini models with Vertex AI
+- Supports plain text inputs (and images/PDFs with the Gemini provider)
+- Works with Vertex AI Gemini models and OpenAI-compatible endpoints
 
 ![prompt2json diagram](diagram.svg)
+
+## Providers
+
+| Provider | Description | Default URL |
+|----------|-------------|-------------|
+| `gemini` (default) | Vertex AI Gemini models | Constructed from `--project` and `--location` |
+| `openapi` | OpenAI-compatible Chat Completions API | `https://api.openai.com/v1/chat/completions` |
+
+The `openapi` provider works with OpenAI, Google Cloud's OpenAI-compatible endpoint, Ollama, and other compatible services.
 
 ## Why prompt2json?
 

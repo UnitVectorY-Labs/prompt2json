@@ -34,14 +34,18 @@ const (
 	exitAPIError        = 5
 )
 
-// File size limits
+// File size limits (Gemini-specific)
 const (
 	maxImageSizeBytes = 7 * 1024 * 1024  // 7 MB per image file (before base64 encoding)
 	maxTotalSizeBytes = 20 * 1024 * 1024 // ~20 MB total request size limit
 )
 
+// Default OpenAI-compatible API URL
+const defaultOpenAPIURL = "https://api.openai.com/v1/chat/completions"
+
 // CLI flags
 var (
+	providerFlag          string
 	systemInstruction     string
 	systemInstructionFile string
 	schema                string
@@ -53,6 +57,8 @@ var (
 	projectFlag           string
 	locationFlag          string
 	modelFlag             string
+	urlFlag               string
+	apiKeyFlag            string
 	timeout               int
 	verbose               bool
 	prettyPrint           bool
@@ -89,21 +95,26 @@ func run() error {
 		return err
 	}
 
-	// Load attachments
+	// Load attachments (provider-aware)
 	attachmentParts, err := loadAttachments(config)
 	if err != nil {
 		return err
 	}
 
-	// Build Gemini API request
-	requestBody, err := buildGeminiRequest(config, attachmentParts)
+	// Build API request (provider-specific)
+	var requestBody []byte
+	if config.Provider == "openapi" {
+		requestBody, err = buildOpenAPIRequest(config)
+	} else {
+		requestBody, err = buildGeminiRequest(config, attachmentParts)
+	}
 	if err != nil {
 		return err
 	}
 
 	// Handle dry-run modes
 	if showURL {
-		url := buildGeminiURL(config)
+		url := buildAPIURL(config)
 		if err := writeOutput(config, url); err != nil {
 			return err
 		}
@@ -129,8 +140,13 @@ func run() error {
 		return nil
 	}
 
-	// Call Gemini API
-	responseJSON, err := callGeminiAPI(config, requestBody)
+	// Call API (provider-specific)
+	var responseJSON string
+	if config.Provider == "openapi" {
+		responseJSON, err = callOpenAPIAPI(config, requestBody)
+	} else {
+		responseJSON, err = callGeminiAPI(config, requestBody)
+	}
 	if err != nil {
 		return err
 	}
@@ -160,6 +176,7 @@ func run() error {
 }
 
 func defineFlags() {
+	flag.StringVar(&providerFlag, "provider", "gemini", "API provider: gemini or openapi (default: gemini)")
 	flag.StringVar(&systemInstruction, "system-instruction", "", "System instruction (inline text)")
 	flag.StringVar(&systemInstructionFile, "system-instruction-file", "", "System instruction from file")
 	flag.StringVar(&schema, "schema", "", "JSON Schema (inline JSON)")
@@ -168,9 +185,11 @@ func defineFlags() {
 	flag.StringVar(&promptFile, "prompt-file", "", "Prompt from file")
 	flag.Var((*stringArrayValue)(&attachments), "attach", "Attach file (repeatable)")
 	flag.StringVar(&outFile, "out", "", "Output file path (default: STDOUT)")
-	flag.StringVar(&projectFlag, "project", "", "GCP project ID")
-	flag.StringVar(&locationFlag, "location", "", "GCP location/region")
-	flag.StringVar(&modelFlag, "model", "", "Gemini model identifier")
+	flag.StringVar(&projectFlag, "project", "", "GCP project ID (gemini only)")
+	flag.StringVar(&locationFlag, "location", "", "GCP location/region (gemini only)")
+	flag.StringVar(&modelFlag, "model", "", "Model identifier")
+	flag.StringVar(&urlFlag, "url", "", "Override API URL (universal)")
+	flag.StringVar(&apiKeyFlag, "api-key", "", "API key for bearer auth (universal)")
 	flag.IntVar(&timeout, "timeout", 60, "HTTP request timeout in seconds (default: 60)")
 	flag.BoolVar(&verbose, "verbose", false, "Enable verbose logging to STDERR")
 	flag.BoolVar(&prettyPrint, "pretty-print", false, "Pretty-print JSON output")
@@ -192,17 +211,26 @@ func (s *stringArrayValue) Set(value string) error {
 }
 
 func printHelp() {
-	fmt.Fprintf(os.Stderr, `prompt2json - Turn prompts into schema-validated JSON using Vertex AI (Gemini)
+	fmt.Fprintf(os.Stderr, `prompt2json - Turn prompts into schema-validated JSON
 
 Usage:
   prompt2json [OPTIONS]
 
-Required:
+Provider:
+  --provider NAME            API provider: gemini or openapi (default: gemini)
+
+Required (all providers):
   --system-instruction TEXT | --system-instruction-file PATH
   --schema JSON             | --schema-file PATH
-  --project ID
-  --location REGION
   --model NAME
+
+Gemini-only (required unless --url is provided):
+  --project ID              GCP project ID (env: GOOGLE_CLOUD_PROJECT)
+  --location REGION         GCP location (env: GOOGLE_CLOUD_LOCATION)
+
+Universal overrides:
+  --url URL                  Override provider's default API URL
+  --api-key KEY              API key for bearer auth (env: OPENAI_API_KEY for openapi)
 
 Input:
   --prompt TEXT              Prompt text (default: read from stdin)
@@ -226,27 +254,42 @@ Misc:
 Environment (used if option not set):
   --project   GOOGLE_CLOUD_PROJECT, CLOUDSDK_CORE_PROJECT
   --location  GOOGLE_CLOUD_LOCATION, GOOGLE_CLOUD_REGION, CLOUDSDK_COMPUTE_REGION
+  --api-key   OPENAI_API_KEY (openapi provider only)
+
+Providers:
+  gemini   Uses Vertex AI Gemini models. Default URL is constructed from
+           project/location. Authentication uses ADC unless --api-key is set.
+  openapi  Uses OpenAI-compatible Chat Completions API. Default URL is
+           https://api.openai.com/v1/chat/completions. Requires --api-key or
+           OPENAI_API_KEY. Compatible with OpenAI, Google Cloud's OpenAI endpoint,
+           Ollama, and other compatible services.
+
+Attachment support:
+  gemini   Supports png, jpg, jpeg, webp, pdf (7 MB per image, 20 MB total)
+  openapi  Text prompts only; attachments are not supported
 
 Exit status: 0 success, 2 usage, 3 input, 4 validation/response, 5 API/auth
 
-JSON Processing:
-  - LLM responses are validated as parsable JSON
-  - Valid JSON is validated against the provided schema
-  - JSON is minified by default; use --pretty-print for human-readable output
-  - Output is only written to STDOUT when validation succeeds
-  - Validation errors are written to STDERR
-
-Example:
+Example (gemini):
   echo "this is great" | prompt2json \
     --system-instruction "Classify sentiment" \
-    --schema '{"type":"object","properties":{"sentiment":{"type":"string","enum":["POSITIVE","NEGATIVE","NEUTRAL"]},"confidence":{"type":"integer","minimum":0,"maximum":100}},"required":["sentiment","confidence"]}' \
+    --schema '{"type":"object","properties":{"sentiment":{"type":"string"}},"required":["sentiment"]}' \
     --project example-project \
     --location us-central1 \
     --model gemini-2.5-flash
+
+Example (openapi):
+  echo "this is great" | prompt2json \
+    --provider openapi \
+    --system-instruction "Classify sentiment" \
+    --schema '{"type":"object","properties":{"sentiment":{"type":"string"}},"required":["sentiment"]}' \
+    --model gpt-4o \
+    --api-key "$OPENAI_API_KEY"
 `)
 }
 
 type Config struct {
+	Provider             string
 	SystemInstruction    string
 	SystemInstructionSrc string // Source: "flag" or file path
 	Schema               map[string]interface{}
@@ -254,9 +297,11 @@ type Config struct {
 	CompiledSchema       *jsonschema.Schema
 	Prompt               string
 	PromptSrc            string // Source: "stdin", "flag", or file path
-	Project              string
-	Location             string
+	Project              string // Gemini only
+	Location             string // Gemini only
 	Model                string
+	URL                  string // Override URL
+	APIKey               string // Bearer token
 	Timeout              int
 	OutFile              string
 	Verbose              bool
@@ -269,6 +314,13 @@ func loadConfiguration() (*Config, error) {
 		OutFile:     outFile,
 		PrettyPrint: prettyPrint,
 	}
+
+	// Validate and set provider
+	provider := strings.ToLower(providerFlag)
+	if provider != "gemini" && provider != "openapi" {
+		return nil, &cliError{"--provider must be 'gemini' or 'openapi'"}
+	}
+	config.Provider = provider
 
 	// Load system instruction
 	if systemInstruction != "" && systemInstructionFile != "" {
@@ -392,35 +444,59 @@ func loadConfiguration() (*Config, error) {
 		}
 	}
 
-	// Load project, location, model with environment fallback
-	config.Project = getConfigValue(projectFlag, "GOOGLE_CLOUD_PROJECT", "CLOUDSDK_CORE_PROJECT")
-	if config.Project == "" {
-		return nil, &cliError{"--project is required (or set GOOGLE_CLOUD_PROJECT)"}
+	// Universal flags
+	config.URL = urlFlag
+	config.APIKey = getConfigValue(apiKeyFlag, "OPENAI_API_KEY")
+
+	// Provider-specific configuration
+	if config.Provider == "gemini" {
+		// Gemini: require project/location unless --url is provided
+		if config.URL == "" {
+			config.Project = getConfigValue(projectFlag, "GOOGLE_CLOUD_PROJECT", "CLOUDSDK_CORE_PROJECT")
+			if config.Project == "" {
+				return nil, &cliError{"--project is required for gemini provider (or set GOOGLE_CLOUD_PROJECT, or use --url)"}
+			}
+
+			// Validate project ID
+			if !project.IsValidProjectID(config.Project) {
+				return nil, &inputError{fmt.Sprintf("invalid GCP project ID: %s", config.Project)}
+			}
+
+			config.Location = getConfigValue(locationFlag, "GOOGLE_CLOUD_LOCATION", "GOOGLE_CLOUD_REGION", "CLOUDSDK_COMPUTE_REGION")
+			if config.Location == "" {
+				return nil, &cliError{"--location is required for gemini provider (or set GOOGLE_CLOUD_LOCATION, or use --url)"}
+			}
+
+			// Validate region (allow "global" for Vertex AI models that are only available globally)
+			if config.Location != "global" && !location.IsValidRegion(config.Location) {
+				return nil, &inputError{fmt.Sprintf("invalid GCP region: %s", config.Location)}
+			}
+		} else {
+			// When --url is provided, project/location are optional
+			config.Project = projectFlag
+			config.Location = locationFlag
+		}
+	} else {
+		// OpenAPI provider: reject --project and --location with hard error
+		if projectFlag != "" {
+			return nil, &cliError{"--project is not valid for openapi provider"}
+		}
+		if locationFlag != "" {
+			return nil, &cliError{"--location is not valid for openapi provider"}
+		}
 	}
 
-	// Validate project ID
-	if !project.IsValidProjectID(config.Project) {
-		return nil, &inputError{fmt.Sprintf("invalid GCP project ID: %s", config.Project)}
-	}
-
-	config.Location = getConfigValue(locationFlag, "GOOGLE_CLOUD_LOCATION", "GOOGLE_CLOUD_REGION", "CLOUDSDK_COMPUTE_REGION")
-	if config.Location == "" {
-		return nil, &cliError{"--location is required (or set GOOGLE_CLOUD_LOCATION)"}
-	}
-
-	// Validate region (allow "global" for Vertex AI models that are only available globally)
-	if config.Location != "global" && !location.IsValidRegion(config.Location) {
-		return nil, &inputError{fmt.Sprintf("invalid GCP region: %s", config.Location)}
-	}
-
+	// Model is required for all providers
 	config.Model = getConfigValue(modelFlag)
 	if config.Model == "" {
 		return nil, &cliError{"--model is required"}
 	}
 
-	// Validate model name
-	if !vertexai.IsValidVertexModelName(config.Model) {
-		return nil, &inputError{fmt.Sprintf("invalid Vertex AI model name: %s", config.Model)}
+	// Validate model name only for gemini provider
+	if config.Provider == "gemini" && config.URL == "" {
+		if !vertexai.IsValidVertexModelName(config.Model) {
+			return nil, &inputError{fmt.Sprintf("invalid Vertex AI model name: %s", config.Model)}
+		}
 	}
 
 	// Validate timeout
@@ -430,7 +506,21 @@ func loadConfiguration() (*Config, error) {
 	config.Timeout = timeout
 
 	if verbose {
-		fmt.Fprintf(os.Stderr, "API configuration: project=%s location=%s model=%s\n", config.Project, config.Location, config.Model)
+		if config.Provider == "gemini" {
+			fmt.Fprintf(os.Stderr, "Provider: gemini\n")
+			if config.URL != "" {
+				fmt.Fprintf(os.Stderr, "API configuration: url=%s model=%s\n", config.URL, config.Model)
+			} else {
+				fmt.Fprintf(os.Stderr, "API configuration: project=%s location=%s model=%s\n", config.Project, config.Location, config.Model)
+			}
+		} else {
+			fmt.Fprintf(os.Stderr, "Provider: openapi\n")
+			if config.URL != "" {
+				fmt.Fprintf(os.Stderr, "API configuration: url=%s model=%s\n", config.URL, config.Model)
+			} else {
+				fmt.Fprintf(os.Stderr, "API configuration: url=%s model=%s\n", defaultOpenAPIURL, config.Model)
+			}
+		}
 	}
 
 	return config, nil
@@ -449,6 +539,11 @@ func getConfigValue(flagValue string, envVars ...string) string {
 }
 
 func loadAttachments(config *Config) ([]interface{}, error) {
+	// OpenAPI provider does not support attachments
+	if config.Provider == "openapi" && len(attachments) > 0 {
+		return nil, &cliError{"--attach is not supported for openapi provider (text prompts only)"}
+	}
+
 	var parts []interface{}
 	var totalRawBytes int64
 	var totalEncodedBytes int64
@@ -481,7 +576,7 @@ func loadAttachments(config *Config) ([]interface{}, error) {
 			return nil, &inputError{fmt.Sprintf("failed to read attachment %s: %v", path, err)}
 		}
 
-		// Validate image file size (7 MB limit before base64 encoding)
+		// Validate image file size (7 MB limit before base64 encoding) - Gemini specific
 		if isImage && len(content) > maxImageSizeBytes {
 			sizeMB := float64(len(content)) / (1024 * 1024)
 			return nil, &inputError{fmt.Sprintf("image file %s exceeds 7 MB limit: %.2f MB (Gemini API limits image files to 7 MB before base64 encoding)", path, sizeMB)}
@@ -509,7 +604,7 @@ func loadAttachments(config *Config) ([]interface{}, error) {
 		}
 	}
 
-	// Validate total attachment size doesn't approach the 20 MB request limit
+	// Validate total attachment size doesn't approach the 20 MB request limit (Gemini specific)
 	const maxAttachmentBytes = 20 * 1024 * 1024
 	if totalEncodedBytes > maxAttachmentBytes {
 		totalMB := float64(totalEncodedBytes) / (1024 * 1024)
@@ -575,22 +670,46 @@ func buildGeminiURL(config *Config) string {
 	return url
 }
 
+// buildAPIURL returns the API URL for the configured provider
+func buildAPIURL(config *Config) string {
+	// If --url is provided, use it verbatim
+	if config.URL != "" {
+		return config.URL
+	}
+
+	// Provider-specific URL construction
+	if config.Provider == "openapi" {
+		return defaultOpenAPIURL
+	}
+
+	// Default: Gemini
+	return buildGeminiURL(config)
+}
+
 func callGeminiAPI(config *Config, requestBody []byte) (string, error) {
 	ctx := context.Background()
 
-	// Get credentials and token
-	creds, err := google.FindDefaultCredentials(ctx, "https://www.googleapis.com/auth/cloud-platform")
-	if err != nil {
-		return "", &apiError{fmt.Sprintf("failed to get credentials: %v", err)}
-	}
-
-	token, err := creds.TokenSource.Token()
-	if err != nil {
-		return "", &apiError{fmt.Sprintf("failed to get access token: %v", err)}
-	}
-
 	// Build URL
-	url := buildGeminiURL(config)
+	url := buildAPIURL(config)
+
+	// Get authorization token
+	var authToken string
+	if config.APIKey != "" {
+		// Use provided API key
+		authToken = config.APIKey
+	} else {
+		// Use ADC for Gemini
+		creds, err := google.FindDefaultCredentials(ctx, "https://www.googleapis.com/auth/cloud-platform")
+		if err != nil {
+			return "", &apiError{fmt.Sprintf("failed to get credentials: %v", err)}
+		}
+
+		token, err := creds.TokenSource.Token()
+		if err != nil {
+			return "", &apiError{fmt.Sprintf("failed to get access token: %v", err)}
+		}
+		authToken = token.AccessToken
+	}
 
 	if config.Verbose {
 		fmt.Fprintf(os.Stderr, "Request: POST %s\n", url)
@@ -603,7 +722,7 @@ func callGeminiAPI(config *Config, requestBody []byte) (string, error) {
 	}
 
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token.AccessToken))
+	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", authToken))
 
 	// Send request
 	client := &http.Client{
@@ -696,7 +815,140 @@ func callGeminiAPI(config *Config, requestBody []byte) (string, error) {
 	return jsonText, nil
 }
 
-// formatJSON formats a JSON object as minified or pretty-printed
+// buildOpenAPIRequest creates a Chat Completions API request body with structured outputs
+func buildOpenAPIRequest(config *Config) ([]byte, error) {
+	// Build the request using OpenAI Chat Completions format with structured outputs
+	// The response_format with json_schema enforces structured output
+	request := map[string]interface{}{
+		"model": config.Model,
+		"messages": []map[string]interface{}{
+			{
+				"role":    "system",
+				"content": config.SystemInstruction,
+			},
+			{
+				"role":    "user",
+				"content": config.Prompt,
+			},
+		},
+		"response_format": map[string]interface{}{
+			"type": "json_schema",
+			"json_schema": map[string]interface{}{
+				"name":   "response",
+				"strict": true,
+				"schema": config.Schema,
+			},
+		},
+	}
+
+	requestBytes, err := json.Marshal(request)
+	if err != nil {
+		return nil, &inputError{fmt.Sprintf("failed to marshal request: %v", err)}
+	}
+
+	return requestBytes, nil
+}
+
+// callOpenAPIAPI calls an OpenAI-compatible Chat Completions API
+func callOpenAPIAPI(config *Config, requestBody []byte) (string, error) {
+	ctx := context.Background()
+
+	// Build URL
+	url := buildAPIURL(config)
+
+	// Get API key
+	if config.APIKey == "" {
+		return "", &apiError{"--api-key is required for openapi provider (or set OPENAI_API_KEY)"}
+	}
+
+	if config.Verbose {
+		fmt.Fprintf(os.Stderr, "Request: POST %s\n", url)
+	}
+
+	// Create request
+	req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewReader(requestBody))
+	if err != nil {
+		return "", &apiError{fmt.Sprintf("failed to create request: %v", err)}
+	}
+
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", config.APIKey))
+
+	// Send request
+	client := &http.Client{
+		Timeout: time.Duration(config.Timeout) * time.Second,
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		return "", &apiError{fmt.Sprintf("failed to call API: %v", err)}
+	}
+	defer resp.Body.Close()
+
+	// Read response
+	respBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", &apiError{fmt.Sprintf("failed to read response: %v", err)}
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return "", &apiError{fmt.Sprintf("API returned status %d: %s", resp.StatusCode, string(respBody))}
+	}
+
+	// Parse response (OpenAI Chat Completions format)
+	var openaiResp struct {
+		ID      string `json:"id"`
+		Object  string `json:"object"`
+		Choices []struct {
+			Index   int `json:"index"`
+			Message struct {
+				Role    string `json:"role"`
+				Content string `json:"content"`
+			} `json:"message"`
+			FinishReason string `json:"finish_reason"`
+		} `json:"choices"`
+		Usage struct {
+			PromptTokens     int `json:"prompt_tokens"`
+			CompletionTokens int `json:"completion_tokens"`
+			TotalTokens      int `json:"total_tokens"`
+		} `json:"usage"`
+	}
+
+	if err := json.Unmarshal(respBody, &openaiResp); err != nil {
+		return "", &validationError{fmt.Sprintf("failed to parse response: %v", err)}
+	}
+
+	if len(openaiResp.Choices) == 0 {
+		return "", &validationError{"no choices in response"}
+	}
+
+	choice := openaiResp.Choices[0]
+
+	// Check finish reason
+	if choice.FinishReason != "stop" {
+		errorMsg := fmt.Sprintf("unexpected finish reason: %s", choice.FinishReason)
+		fmt.Fprintf(os.Stderr, "Generation stopped: finish_reason=%s\n", choice.FinishReason)
+		return "", &validationError{errorMsg}
+	}
+
+	jsonText := choice.Message.Content
+
+	if jsonText == "" {
+		return "", &validationError{"empty response content"}
+	}
+
+	// Log token usage if verbose
+	if config.Verbose {
+		fmt.Fprintf(os.Stderr, "API response: finish_reason=%s\n", choice.FinishReason)
+		if openaiResp.Usage.TotalTokens > 0 {
+			fmt.Fprintf(os.Stderr, "Token usage:\n")
+			fmt.Fprintf(os.Stderr, "  prompt_tokens:     %d\n", openaiResp.Usage.PromptTokens)
+			fmt.Fprintf(os.Stderr, "  completion_tokens: %d\n", openaiResp.Usage.CompletionTokens)
+			fmt.Fprintf(os.Stderr, "  total_tokens:      %d\n", openaiResp.Usage.TotalTokens)
+		}
+	}
+
+	return jsonText, nil
+}
 func formatJSON(jsonObj interface{}, prettyPrint bool) (string, error) {
 	var formattedBytes []byte
 	var err error

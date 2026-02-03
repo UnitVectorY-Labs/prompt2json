@@ -3,7 +3,7 @@
 
 # prompt2json
 
-Unix-style CLI that sends a system instruction, required JSON Schema, and text or file inputs to Vertex AI (Gemini models) and returns schema-validated JSON for easy batch processing.
+Unix-style CLI that sends a system instruction, required JSON Schema, and text inputs to LLM APIs and returns schema-validated JSON for easy batch processing. Supports Vertex AI (Gemini) and OpenAI-compatible endpoints.
 
 ## Overview
 
@@ -11,9 +11,18 @@ Unix-style CLI that sends a system instruction, required JSON Schema, and text o
 
 - Turn free form prompts into machine reliable JSON for automation and batch workflows
 - Enforce output shape using JSON Schema rather than post processing heuristics
-- Make Gemini usable in shell pipelines, scripts, and data processing jobs
+- Make LLMs usable in shell pipelines, scripts, and data processing jobs
 - Enable repeatable, inspectable prompt experiments from the command line
 - Treat LLM calls as deterministic interfaces, not interactive sessions
+
+## Providers
+
+| Provider | Description | Default URL |
+|----------|-------------|-------------|
+| `gemini` (default) | Vertex AI Gemini models | Constructed from `--project` and `--location` |
+| `openapi` | OpenAI-compatible Chat Completions API | `https://api.openai.com/v1/chat/completions` |
+
+The `openapi` provider works with OpenAI, Google Cloud's OpenAI-compatible endpoint, Ollama, and other compatible services.
 
 ## Installation
 
@@ -31,7 +40,7 @@ go build -o prompt2json
 
 ## Examples
 
-The following example is a simple demonstration of how input text can be classified specifying the systems instructions and critically the JSON schema that defines and enforces the expected output structure.
+### Gemini Provider (default)
 
 ```bash
 export GOOGLE_CLOUD_PROJECT=example-project
@@ -42,6 +51,17 @@ echo "this is great" | prompt2json \
     --model gemini-2.5-flash
 ```
 
+### OpenAPI Provider
+
+```bash
+echo "this is great" | prompt2json \
+    --provider openapi \
+    --system-instruction "Classify sentiment" \
+    --schema '{"type":"object","properties":{"sentiment":{"type":"string","enum":["POSITIVE","NEGATIVE","NEUTRAL"]},"confidence":{"type":"integer","minimum":0,"maximum":100}},"required":["sentiment","confidence"]}' \
+    --model gpt-4o \
+    --api-key "$OPENAI_API_KEY"
+```
+
 The output will be minified JSON matching the specified schema:
 
 ```json
@@ -50,17 +70,13 @@ The output will be minified JSON matching the specified schema:
 
 ## Usage
 
-The `prompt2json` application follows Unix-style CLI conventions and can be used in shell pipelines, scripts, and data processing jobs.
-
 ```
 prompt2json [OPTIONS]
 ```
 
 ### Authentication
 
-`prompt2json` uses Google Application Default Credentials.
-
-Authenticate locally with:
+**Gemini provider:** Uses Google Application Default Credentials by default. Authenticate locally with:
 
 ```bash
 gcloud auth application-default login
@@ -72,11 +88,20 @@ Or via service account:
 export GOOGLE_APPLICATION_CREDENTIALS=/path/to/key.json
 ```
 
+**OpenAPI provider:** Requires an API key via `--api-key` flag or `OPENAI_API_KEY` environment variable.
+
 For complete usage documentation including all options, environment variables, and command line conventions, see the [Usage documentation](https://unitvectory-labs.github.io/prompt2json/usage).
+
+## Attachment Support
+
+| Provider | Attachments |
+|----------|-------------|
+| `gemini` | Supports png, jpg, jpeg, webp, pdf (7 MB per image, 20 MB total) |
+| `openapi` | Text prompts only; attachments are not supported |
 
 ## Limitations
 
-- Image attachments are limited to 7 MB each before base64 encoding
-- Total request size is limited to roughly 20 MB
-- Supported attachment types are PNG, JPEG, WebP, and PDF
-- Limitations of Gemini models apply
+- Gemini: Image attachments are limited to 7 MB each before base64 encoding
+- Gemini: Total request size is limited to roughly 20 MB
+- OpenAPI: File attachments are not supported (text prompts only)
+- Limitations of the underlying LLM models apply
