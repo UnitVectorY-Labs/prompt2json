@@ -15,10 +15,12 @@ prompt2json [OPTIONS]
 
 ## Providers
 
+The `--provider` flag is required and determines which API format to use:
+
 | Provider | Description |
 |----------|-------------|
-| `gemini` (default) | Vertex AI Gemini models |
-| `openapi` | OpenAI-compatible Chat Completions API |
+| `gemini` | Vertex AI Gemini models |
+| `openai` | OpenAI-compatible Chat Completions API |
 
 ## Universal Options
 
@@ -26,7 +28,7 @@ These options work with all providers:
 
 | Option                     | Arg   | Required | Notes                                               |
 |----------------------------|-------|----------|-----------------------------------------------------|
-| `--provider`               | name  | no       | `gemini` (default) or `openapi`                     |
+| `--provider`               | name  | yes      | `gemini` or `openai` (required)                     |
 | `--system-instruction`     | text  | yes*     | Exactly one* of this or `--system-instruction-file` |
 | `--system-instruction-file`| path  | yes*     | Exactly one* of this or `--system-instruction`      |
 | `--schema`                 | json  | yes*     | Exactly one* of this or `--schema-file`             |
@@ -36,7 +38,7 @@ These options work with all providers:
 | `--attach`                 | path  | no       | Repeatable. See attachment support by provider      |
 | `--model`                  | name  | yes      | Model identifier                                    |
 | `--url`                    | url   | no       | Override default API URL                            |
-| `--api-key`                | key   | no*      | API key for bearer auth (required for openapi)      |
+| `--api-key`                | key   | no*      | API key for bearer auth (see authentication)        |
 | `--timeout`                | int   | no       | HTTP request timeout in seconds; default is 60      |
 | `--out`                    | path  | no       | Output file path; defaults to STDOUT if not set     |
 | `--pretty-print`           |       | no       | Pretty-print JSON output; default is minified       |
@@ -55,7 +57,19 @@ These options only apply when `--provider=gemini`:
 | `--project` | id     | yes*     | GCP project ID (unless --url is provided)|
 | `--location`| region | yes*     | GCP region (unless --url is provided)    |
 
-When `--provider=openapi`, using `--project` or `--location` will result in an error.
+When `--provider=openai`, using `--project` or `--location` will result in an error.
+
+## OpenAI-only Options
+
+These options only apply when `--provider=openai`:
+
+| Option           | Arg  | Required | Notes                                              |
+|------------------|------|----------|----------------------------------------------------|
+| `--strict-schema`|      | no       | Enable strict mode for JSON schema validation      |
+
+When `--provider=gemini`, using `--strict-schema` will result in an error.
+
+The `--strict-schema` flag enables OpenAI's [strict mode](https://platform.openai.com/docs/guides/structured-outputs?api-mode=chat) for structured outputs, which will return an error if the JSON schema contains unsupported constructs.
 
 ## URL Behavior
 
@@ -63,7 +77,7 @@ When `--provider=openapi`, using `--project` or `--location` will result in an e
 |-----------|----------|
 | `--url` provided | Uses the provided URL verbatim |
 | `--provider=gemini` (no --url) | Constructed from `--project` and `--location` |
-| `--provider=openapi` (no --url) | `https://api.openai.com/v1/chat/completions` |
+| `--provider=openai` (no --url) | `https://api.openai.com/v1/chat/completions` |
 
 The `--url` flag allows using custom endpoints, including:
 - Google Cloud's OpenAI-compatible endpoint
@@ -75,7 +89,7 @@ The `--url` flag allows using custom endpoints, including:
 | Provider | Default Auth | `--api-key` Behavior |
 |----------|--------------|---------------------|
 | `gemini` | Google Application Default Credentials (ADC) | Overrides ADC with bearer token |
-| `openapi` | None (required via flag or env) | Used as bearer token |
+| `openai` | Required via flag or env (unless --url is used) | Used as bearer token |
 
 **Gemini provider:** Authenticate with:
 
@@ -85,13 +99,15 @@ gcloud auth application-default login
 export GOOGLE_APPLICATION_CREDENTIALS=/path/to/key.json
 ```
 
-**OpenAPI provider:** Provide an API key via:
+**OpenAI provider:** Provide an API key via:
 
 ```bash
 --api-key "your-api-key"
 # or
 export OPENAI_API_KEY="your-api-key"
 ```
+
+When using `--url` with the openai provider (for local servers like Ollama), the API key is optional.
 
 ## Environment Variables
 
@@ -108,9 +124,9 @@ Options always take precedence over environment variables.
 | Provider | Supported Types | Limits |
 |----------|-----------------|--------|
 | `gemini` | `.png`, `.jpg`, `.jpeg`, `.webp`, `.pdf` | 7 MB per image, 20 MB total |
-| `openapi` | Not supported | Text prompts only |
+| `openai` | Not supported | Text prompts only |
 
-Using `--attach` with `--provider=openapi` will result in an error.
+Using `--attach` with `--provider=openai` will result in an error.
 
 ## Command Line
 

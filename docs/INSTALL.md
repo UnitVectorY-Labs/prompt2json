@@ -33,9 +33,9 @@ go build -o prompt2json
 
 ## Authentication
 
-### Gemini Provider (default)
+### Gemini Provider
 
-`prompt2json` requires Google Cloud credentials to access Gemini models when using the default Gemini provider.
+`prompt2json` requires Google Cloud credentials to access Gemini models when using the Gemini provider (`--provider gemini`).
 
 {: .important }
 You will be charged for usage of Gemini models according to [Google Cloud's pricing](https://cloud.google.com/vertex-ai/pricing#generative_ai_models).
@@ -58,12 +58,14 @@ Set your project (can be specified with `--project` flag as well):
 export GOOGLE_CLOUD_PROJECT=your-project-id
 ```
 
-### OpenAPI Provider
+### OpenAI Provider
 
-When using the OpenAPI provider (`--provider openapi`), an API key is required:
+When using the OpenAI provider (`--provider openai`), an API key is required when using the default OpenAI URL:
 
 ```bash
 export OPENAI_API_KEY=your-api-key
 ```
 
 Or provide it directly via the `--api-key` flag.
+
+When using `--url` to specify a custom endpoint (such as a local Ollama server), the API key is optional.

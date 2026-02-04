@@ -41,7 +41,7 @@ const (
 )
 
 // Default OpenAI-compatible API URL
-const defaultOpenAPIURL = "https://api.openai.com/v1/chat/completions"
+const defaultOpenAIURL = "https://api.openai.com/v1/chat/completions"
 
 // CLI flags
 var (
@@ -59,6 +59,7 @@ var (
 	modelFlag             string
 	urlFlag               string
 	apiKeyFlag            string
+	strictSchemaFlag      bool
 	timeout               int
 	verbose               bool
 	prettyPrint           bool
@@ -103,8 +104,8 @@ func run() error {
 
 	// Build API request (provider-specific)
 	var requestBody []byte
-	if config.Provider == "openapi" {
-		requestBody, err = buildOpenAPIRequest(config)
+	if config.Provider == "openai" {
+		requestBody, err = buildOpenAIRequest(config)
 	} else {
 		requestBody, err = buildGeminiRequest(config, attachmentParts)
 	}
@@ -142,8 +143,8 @@ func run() error {
 
 	// Call API (provider-specific)
 	var responseJSON string
-	if config.Provider == "openapi" {
-		responseJSON, err = callOpenAPIAPI(config, requestBody)
+	if config.Provider == "openai" {
+		responseJSON, err = callOpenAIAPI(config, requestBody)
 	} else {
 		responseJSON, err = callGeminiAPI(config, requestBody)
 	}
@@ -176,7 +177,7 @@ func run() error {
 }
 
 func defineFlags() {
-	flag.StringVar(&providerFlag, "provider", "gemini", "API provider: gemini or openapi (default: gemini)")
+	flag.StringVar(&providerFlag, "provider", "", "API provider: gemini or openai (required)")
 	flag.StringVar(&systemInstruction, "system-instruction", "", "System instruction (inline text)")
 	flag.StringVar(&systemInstructionFile, "system-instruction-file", "", "System instruction from file")
 	flag.StringVar(&schema, "schema", "", "JSON Schema (inline JSON)")
@@ -190,6 +191,7 @@ func defineFlags() {
 	flag.StringVar(&modelFlag, "model", "", "Model identifier")
 	flag.StringVar(&urlFlag, "url", "", "Override API URL (universal)")
 	flag.StringVar(&apiKeyFlag, "api-key", "", "API key for bearer auth (universal)")
+	flag.BoolVar(&strictSchemaFlag, "strict-schema", false, "Enable strict mode for JSON schema validation (openai only)")
 	flag.IntVar(&timeout, "timeout", 60, "HTTP request timeout in seconds (default: 60)")
 	flag.BoolVar(&verbose, "verbose", false, "Enable verbose logging to STDERR")
 	flag.BoolVar(&prettyPrint, "pretty-print", false, "Pretty-print JSON output")
@@ -216,8 +218,8 @@ func printHelp() {
 Usage:
   prompt2json [OPTIONS]
 
-Provider:
-  --provider NAME            API provider: gemini or openapi (default: gemini)
+Provider (required):
+  --provider NAME            API provider: gemini or openai (required)
 
 Required (all providers):
   --system-instruction TEXT | --system-instruction-file PATH
@@ -228,9 +230,12 @@ Gemini-only (required unless --url is provided):
   --project ID              GCP project ID (env: GOOGLE_CLOUD_PROJECT)
   --location REGION         GCP location (env: GOOGLE_CLOUD_LOCATION)
 
+OpenAI-only:
+  --strict-schema            Enable strict mode for JSON schema validation
+
 Universal overrides:
   --url URL                  Override provider's default API URL
-  --api-key KEY              API key for bearer auth (env: OPENAI_API_KEY for openapi)
+  --api-key KEY              API key for bearer auth (env: OPENAI_API_KEY)
 
 Input:
   --prompt TEXT              Prompt text (default: read from stdin)
@@ -254,37 +259,47 @@ Misc:
 Environment (used if option not set):
   --project   GOOGLE_CLOUD_PROJECT, CLOUDSDK_CORE_PROJECT
   --location  GOOGLE_CLOUD_LOCATION, GOOGLE_CLOUD_REGION, CLOUDSDK_COMPUTE_REGION
-  --api-key   OPENAI_API_KEY (openapi provider only)
+  --api-key   OPENAI_API_KEY
 
 Providers:
   gemini   Uses Vertex AI Gemini models. Default URL is constructed from
            project/location. Authentication uses ADC unless --api-key is set.
-  openapi  Uses OpenAI-compatible Chat Completions API. Default URL is
+  openai   Uses OpenAI-compatible Chat Completions API. Default URL is
            https://api.openai.com/v1/chat/completions. Requires --api-key or
-           OPENAI_API_KEY. Compatible with OpenAI, Google Cloud's OpenAI endpoint,
-           Ollama, and other compatible services.
+           OPENAI_API_KEY unless --url is provided (for local servers like Ollama).
+           Compatible with OpenAI, Google Cloud's OpenAI endpoint, Ollama, and
+           other compatible services.
 
 Attachment support:
   gemini   Supports png, jpg, jpeg, webp, pdf (7 MB per image, 20 MB total)
-  openapi  Text prompts only; attachments are not supported
+  openai   Text prompts only; attachments are not supported
 
 Exit status: 0 success, 2 usage, 3 input, 4 validation/response, 5 API/auth
 
 Example (gemini):
   echo "this is great" | prompt2json \
+    --provider gemini \
     --system-instruction "Classify sentiment" \
     --schema '{"type":"object","properties":{"sentiment":{"type":"string"}},"required":["sentiment"]}' \
     --project example-project \
     --location us-central1 \
     --model gemini-2.5-flash
 
-Example (openapi):
+Example (openai):
   echo "this is great" | prompt2json \
-    --provider openapi \
+    --provider openai \
     --system-instruction "Classify sentiment" \
     --schema '{"type":"object","properties":{"sentiment":{"type":"string"}},"required":["sentiment"]}' \
     --model gpt-4o \
     --api-key "$OPENAI_API_KEY"
+
+Example (openai with Ollama):
+  echo "this is great" | prompt2json \
+    --provider openai \
+    --url "http://localhost:11434/v1/chat/completions" \
+    --system-instruction "Classify sentiment" \
+    --schema '{"type":"object","properties":{"sentiment":{"type":"string"}},"required":["sentiment"]}' \
+    --model llama3
 `)
 }
 
@@ -302,6 +317,7 @@ type Config struct {
 	Model                string
 	URL                  string // Override URL
 	APIKey               string // Bearer token
+	StrictSchema         bool   // OpenAI only: enable strict mode for JSON schema
 	Timeout              int
 	OutFile              string
 	Verbose              bool
@@ -315,10 +331,13 @@ func loadConfiguration() (*Config, error) {
 		PrettyPrint: prettyPrint,
 	}
 
-	// Validate and set provider
+	// Validate and set provider (now required)
 	provider := strings.ToLower(providerFlag)
-	if provider != "gemini" && provider != "openapi" {
-		return nil, &cliError{"--provider must be 'gemini' or 'openapi'"}
+	if provider == "" {
+		return nil, &cliError{"--provider is required (gemini or openai)"}
+	}
+	if provider != "gemini" && provider != "openai" {
+		return nil, &cliError{"--provider must be 'gemini' or 'openai'"}
 	}
 	config.Provider = provider
 
@@ -476,14 +495,22 @@ func loadConfiguration() (*Config, error) {
 			config.Project = projectFlag
 			config.Location = locationFlag
 		}
+
+		// Reject --strict-schema for gemini provider
+		if strictSchemaFlag {
+			return nil, &cliError{"--strict-schema is only valid for openai provider"}
+		}
 	} else {
-		// OpenAPI provider: reject --project and --location with hard error
+		// OpenAI provider: reject --project and --location with hard error
 		if projectFlag != "" {
-			return nil, &cliError{"--project is not valid for openapi provider"}
+			return nil, &cliError{"--project is not valid for openai provider"}
 		}
 		if locationFlag != "" {
-			return nil, &cliError{"--location is not valid for openapi provider"}
+			return nil, &cliError{"--location is not valid for openai provider"}
 		}
+
+		// Set strict schema flag for OpenAI
+		config.StrictSchema = strictSchemaFlag
 	}
 
 	// Model is required for all providers
@@ -514,11 +541,11 @@ func loadConfiguration() (*Config, error) {
 				fmt.Fprintf(os.Stderr, "API configuration: project=%s location=%s model=%s\n", config.Project, config.Location, config.Model)
 			}
 		} else {
-			fmt.Fprintf(os.Stderr, "Provider: openapi\n")
+			fmt.Fprintf(os.Stderr, "Provider: openai\n")
 			if config.URL != "" {
 				fmt.Fprintf(os.Stderr, "API configuration: url=%s model=%s\n", config.URL, config.Model)
 			} else {
-				fmt.Fprintf(os.Stderr, "API configuration: url=%s model=%s\n", defaultOpenAPIURL, config.Model)
+				fmt.Fprintf(os.Stderr, "API configuration: url=%s model=%s\n", defaultOpenAIURL, config.Model)
 			}
 		}
 	}
@@ -539,9 +566,9 @@ func getConfigValue(flagValue string, envVars ...string) string {
 }
 
 func loadAttachments(config *Config) ([]interface{}, error) {
-	// OpenAPI provider does not support attachments
-	if config.Provider == "openapi" && len(attachments) > 0 {
-		return nil, &cliError{"--attach is not supported for openapi provider (text prompts only)"}
+	// OpenAI provider does not support attachments
+	if config.Provider == "openai" && len(attachments) > 0 {
+		return nil, &cliError{"--attach is not supported for openai provider (text prompts only)"}
 	}
 
 	var parts []interface{}
@@ -678,8 +705,8 @@ func buildAPIURL(config *Config) string {
 	}
 
 	// Provider-specific URL construction
-	if config.Provider == "openapi" {
-		return defaultOpenAPIURL
+	if config.Provider == "openai" {
+		return defaultOpenAIURL
 	}
 
 	// Default: Gemini
@@ -815,10 +842,20 @@ func callGeminiAPI(config *Config, requestBody []byte) (string, error) {
 	return jsonText, nil
 }
 
-// buildOpenAPIRequest creates a Chat Completions API request body with structured outputs
-func buildOpenAPIRequest(config *Config) ([]byte, error) {
+// buildOpenAIRequest creates a Chat Completions API request body with structured outputs
+func buildOpenAIRequest(config *Config) ([]byte, error) {
 	// Build the request using OpenAI Chat Completions format with structured outputs
 	// The response_format with json_schema enforces structured output
+	jsonSchemaConfig := map[string]interface{}{
+		"name":   "response",
+		"schema": config.Schema,
+	}
+
+	// Add strict mode only if enabled
+	if config.StrictSchema {
+		jsonSchemaConfig["strict"] = true
+	}
+
 	request := map[string]interface{}{
 		"model": config.Model,
 		"messages": []map[string]interface{}{
@@ -832,12 +869,8 @@ func buildOpenAPIRequest(config *Config) ([]byte, error) {
 			},
 		},
 		"response_format": map[string]interface{}{
-			"type": "json_schema",
-			"json_schema": map[string]interface{}{
-				"name":   "response",
-				"strict": true,
-				"schema": config.Schema,
-			},
+			"type":        "json_schema",
+			"json_schema": jsonSchemaConfig,
 		},
 	}
 
@@ -849,16 +882,17 @@ func buildOpenAPIRequest(config *Config) ([]byte, error) {
 	return requestBytes, nil
 }
 
-// callOpenAPIAPI calls an OpenAI-compatible Chat Completions API
-func callOpenAPIAPI(config *Config, requestBody []byte) (string, error) {
+// callOpenAIAPI calls an OpenAI-compatible Chat Completions API
+func callOpenAIAPI(config *Config, requestBody []byte) (string, error) {
 	ctx := context.Background()
 
 	// Build URL
 	url := buildAPIURL(config)
 
-	// Get API key
-	if config.APIKey == "" {
-		return "", &apiError{"--api-key is required for openapi provider (or set OPENAI_API_KEY)"}
+	// API key is optional when --url is provided (for local servers like Ollama)
+	// but required when using the default OpenAI URL
+	if config.APIKey == "" && config.URL == "" {
+		return "", &apiError{"--api-key is required for openai provider (or set OPENAI_API_KEY, or use --url for local servers)"}
 	}
 
 	if config.Verbose {
@@ -872,7 +906,10 @@ func callOpenAPIAPI(config *Config, requestBody []byte) (string, error) {
 	}
 
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", config.APIKey))
+	// Only set Authorization header if API key is provided
+	if config.APIKey != "" {
+		req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", config.APIKey))
+	}
 
 	// Send request
 	client := &http.Client{

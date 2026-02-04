@@ -3,7 +3,7 @@
 
 # prompt2json
 
-Unix-style CLI that sends a system instruction, required JSON Schema, and text inputs to LLM APIs and returns schema-validated JSON for easy batch processing. Supports Vertex AI (Gemini) and OpenAI-compatible endpoints.
+Unix-style CLI that sends a system instruction, required JSON Schema, and text inputs to LLM APIs and returns schema-validated JSON for easy batch processing. Supports Vertex AI (Gemini) and OpenAI-compatible Chat Completions endpoints.
 
 ## Overview
 
@@ -17,12 +17,14 @@ Unix-style CLI that sends a system instruction, required JSON Schema, and text i
 
 ## Providers
 
+The `--provider` flag is required and determines which API format to use:
+
 | Provider | Description | Default URL |
 |----------|-------------|-------------|
-| `gemini` (default) | Vertex AI Gemini models | Constructed from `--project` and `--location` |
-| `openapi` | OpenAI-compatible Chat Completions API | `https://api.openai.com/v1/chat/completions` |
+| `gemini` | Vertex AI Gemini models | Constructed from `--project` and `--location` |
+| `openai` | OpenAI-compatible Chat Completions API | `https://api.openai.com/v1/chat/completions` |
 
-The `openapi` provider works with OpenAI, Google Cloud's OpenAI-compatible endpoint, Ollama, and other compatible services.
+The `openai` provider works with OpenAI, Google Cloud's OpenAI-compatible endpoint, Ollama, and other compatible services.
 
 ## Installation
 
@@ -40,26 +42,38 @@ go build -o prompt2json
 
 ## Examples
 
-### Gemini Provider (default)
+### Gemini Provider
 
 ```bash
 export GOOGLE_CLOUD_PROJECT=example-project
 echo "this is great" | prompt2json \
+    --provider gemini \
     --system-instruction "Classify sentiment" \
     --schema '{"type":"object","properties":{"sentiment":{"type":"string","enum":["POSITIVE","NEGATIVE","NEUTRAL"]},"confidence":{"type":"integer","minimum":0,"maximum":100}},"required":["sentiment","confidence"]}' \
     --location us-central1 \
     --model gemini-2.5-flash
 ```
 
-### OpenAPI Provider
+### OpenAI Provider
 
 ```bash
 echo "this is great" | prompt2json \
-    --provider openapi \
+    --provider openai \
     --system-instruction "Classify sentiment" \
     --schema '{"type":"object","properties":{"sentiment":{"type":"string","enum":["POSITIVE","NEGATIVE","NEUTRAL"]},"confidence":{"type":"integer","minimum":0,"maximum":100}},"required":["sentiment","confidence"]}' \
     --model gpt-4o \
     --api-key "$OPENAI_API_KEY"
+```
+
+### OpenAI Provider with Ollama (local)
+
+```bash
+echo "this is great" | prompt2json \
+    --provider openai \
+    --url "http://localhost:11434/v1/chat/completions" \
+    --system-instruction "Classify sentiment" \
+    --schema '{"type":"object","properties":{"sentiment":{"type":"string"}},"required":["sentiment"]}' \
+    --model llama3
 ```
 
 The output will be minified JSON matching the specified schema:
@@ -88,7 +102,7 @@ Or via service account:
 export GOOGLE_APPLICATION_CREDENTIALS=/path/to/key.json
 ```
 
-**OpenAPI provider:** Requires an API key via `--api-key` flag or `OPENAI_API_KEY` environment variable.
+**OpenAI provider:** Requires an API key via `--api-key` flag or `OPENAI_API_KEY` environment variable when using the default OpenAI URL. When `--url` is provided (for local servers like Ollama), the API key is optional.
 
 For complete usage documentation including all options, environment variables, and command line conventions, see the [Usage documentation](https://unitvectory-labs.github.io/prompt2json/usage).
 
@@ -97,11 +111,11 @@ For complete usage documentation including all options, environment variables, a
 | Provider | Attachments |
 |----------|-------------|
 | `gemini` | Supports png, jpg, jpeg, webp, pdf (7 MB per image, 20 MB total) |
-| `openapi` | Text prompts only; attachments are not supported |
+| `openai` | Text prompts only; attachments are not supported |
 
 ## Limitations
 
 - Gemini: Image attachments are limited to 7 MB each before base64 encoding
 - Gemini: Total request size is limited to roughly 20 MB
-- OpenAPI: File attachments are not supported (text prompts only)
+- OpenAI: File attachments are not supported (text prompts only)
 - Limitations of the underlying LLM models apply
