@@ -10,8 +10,8 @@ import (
 	"io"
 	"net/http"
 	"os"
-	"runtime/debug"
 	"path/filepath"
+	"runtime/debug"
 	"strings"
 	"time"
 
@@ -317,7 +317,7 @@ type Config struct {
 	Provider             string
 	SystemInstruction    string
 	SystemInstructionSrc string // Source: "flag" or file path
-	Schema               map[string]interface{}
+	Schema               map[string]any
 	SchemaSrc            string // Source: "flag" or file path
 	CompiledSchema       *jsonschema.Schema
 	Prompt               string
@@ -575,13 +575,13 @@ func getConfigValue(flagValue string, envVars ...string) string {
 	return ""
 }
 
-func loadAttachments(config *Config) ([]interface{}, error) {
+func loadAttachments(config *Config) ([]any, error) {
 	// OpenAI provider does not support attachments
 	if config.Provider == "openai" && len(attachments) > 0 {
 		return nil, &cliError{"--attach is not supported for openai provider (text prompts only)"}
 	}
 
-	var parts []interface{}
+	var parts []any
 	var totalRawBytes int64
 	var totalEncodedBytes int64
 
@@ -623,8 +623,8 @@ func loadAttachments(config *Config) ([]interface{}, error) {
 		totalRawBytes += int64(len(content))
 		totalEncodedBytes += int64(len(encodedData))
 
-		part := map[string]interface{}{
-			"inlineData": map[string]interface{}{
+		part := map[string]any{
+			"inlineData": map[string]any{
 				"mimeType": mimeType,
 				"data":     encodedData,
 			},
@@ -656,30 +656,30 @@ func loadAttachments(config *Config) ([]interface{}, error) {
 	return parts, nil
 }
 
-func buildGeminiRequest(config *Config, attachmentParts []interface{}) ([]byte, error) {
+func buildGeminiRequest(config *Config, attachmentParts []any) ([]byte, error) {
 	// Build parts array with prompt text and attachments
-	contentParts := []interface{}{
-		map[string]interface{}{
+	contentParts := []any{
+		map[string]any{
 			"text": config.Prompt,
 		},
 	}
 	contentParts = append(contentParts, attachmentParts...)
 
-	request := map[string]interface{}{
-		"systemInstruction": map[string]interface{}{
-			"parts": []interface{}{
-				map[string]interface{}{
+	request := map[string]any{
+		"systemInstruction": map[string]any{
+			"parts": []any{
+				map[string]any{
 					"text": config.SystemInstruction,
 				},
 			},
 		},
-		"contents": []interface{}{
-			map[string]interface{}{
+		"contents": []any{
+			map[string]any{
 				"role":  "user",
 				"parts": contentParts,
 			},
 		},
-		"generationConfig": map[string]interface{}{
+		"generationConfig": map[string]any{
 			"responseMimeType":   "application/json",
 			"responseJsonSchema": config.Schema,
 		},
@@ -856,7 +856,7 @@ func callGeminiAPI(config *Config, requestBody []byte) (string, error) {
 func buildOpenAIRequest(config *Config) ([]byte, error) {
 	// Build the request using OpenAI Chat Completions format with structured outputs
 	// The response_format with json_schema enforces structured output
-	jsonSchemaConfig := map[string]interface{}{
+	jsonSchemaConfig := map[string]any{
 		"name":   "response",
 		"schema": config.Schema,
 	}
@@ -866,9 +866,9 @@ func buildOpenAIRequest(config *Config) ([]byte, error) {
 		jsonSchemaConfig["strict"] = true
 	}
 
-	request := map[string]interface{}{
+	request := map[string]any{
 		"model": config.Model,
-		"messages": []map[string]interface{}{
+		"messages": []map[string]any{
 			{
 				"role":    "system",
 				"content": config.SystemInstruction,
@@ -878,7 +878,7 @@ func buildOpenAIRequest(config *Config) ([]byte, error) {
 				"content": config.Prompt,
 			},
 		},
-		"response_format": map[string]interface{}{
+		"response_format": map[string]any{
 			"type":        "json_schema",
 			"json_schema": jsonSchemaConfig,
 		},
@@ -996,7 +996,7 @@ func callOpenAIAPI(config *Config, requestBody []byte) (string, error) {
 
 	return jsonText, nil
 }
-func formatJSON(jsonObj interface{}, prettyPrint bool) (string, error) {
+func formatJSON(jsonObj any, prettyPrint bool) (string, error) {
 	var formattedBytes []byte
 	var err error
 
@@ -1016,7 +1016,7 @@ func formatJSON(jsonObj interface{}, prettyPrint bool) (string, error) {
 // validateAndFormatJSON parses, validates, and formats JSON from LLM response
 func validateAndFormatJSON(config *Config, rawResponse string) (string, error) {
 	// Try to parse JSON
-	var jsonObj interface{}
+	var jsonObj any
 	if err := json.Unmarshal([]byte(rawResponse), &jsonObj); err != nil {
 		// If parsing fails, return raw text with validation error
 		if config.Verbose {
