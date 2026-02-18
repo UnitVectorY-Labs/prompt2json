@@ -16,7 +16,7 @@ Unix-style CLI that brings English-as-Code to your command line. Define behavior
 - Make LLMs usable in shell pipelines, scripts, and data processing jobs
 - Enable repeatable, inspectable prompt experiments from the command line
 - Treat LLM calls as deterministic interfaces, not interactive sessions
-- Supports plain text inputs (and images/PDFs with the Gemini provider)
+- Supports plain text inputs and inline attachments (`.png`, `.jpg`, `.jpeg`, `.webp`, `.pdf`)
 - Works with Vertex AI Gemini models and OpenAI-compatible Chat Completions endpoints
 
 ![prompt2json diagram](diagram.svg)
@@ -31,6 +31,7 @@ The `--provider` flag is required and determines which API format to use:
 | `openai` | OpenAI-compatible Chat Completions API | `https://api.openai.com/v1/chat/completions` |
 
 The `openai` provider works with OpenAI, Google Cloud's OpenAI-compatible endpoint, Ollama, and other compatible services.
+Some OpenAI-compatible endpoints may reject multimodal attachment payloads even when text-only requests work.
 
 ## Why prompt2json?
 

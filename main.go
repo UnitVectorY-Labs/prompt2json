@@ -107,7 +107,7 @@ func run() error {
 	}
 
 	// Load attachments (provider-aware)
-	attachmentParts, err := loadAttachments(config)
+	attachmentData, err := loadAttachments(config)
 	if err != nil {
 		return err
 	}
@@ -115,9 +115,9 @@ func run() error {
 	// Build API request (provider-specific)
 	var requestBody []byte
 	if config.Provider == "openai" {
-		requestBody, err = buildOpenAIRequest(config)
+		requestBody, err = buildOpenAIRequest(config, attachmentData)
 	} else {
-		requestBody, err = buildGeminiRequest(config, attachmentParts)
+		requestBody, err = buildGeminiRequest(config, attachmentData)
 	}
 	if err != nil {
 		return err
@@ -282,7 +282,8 @@ Providers:
 
 Attachment support:
   gemini   Supports png, jpg, jpeg, webp, pdf (7 MB per image, 20 MB total)
-  openai   Text prompts only; attachments are not supported
+  openai   Supports png, jpg, jpeg, webp, pdf as inline base64 content
+           (some OpenAI-compatible endpoints may reject multimodal payloads)
 
 Exit status: 0 success, 2 usage, 3 input, 4 validation/response, 5 API/auth
 
@@ -332,6 +333,14 @@ type Config struct {
 	OutFile              string
 	Verbose              bool
 	PrettyPrint          bool
+}
+
+type Attachment struct {
+	Path        string
+	Filename    string
+	MIMEType    string
+	EncodedData string
+	IsImage     bool
 }
 
 func loadConfiguration() (*Config, error) {
@@ -575,14 +584,8 @@ func getConfigValue(flagValue string, envVars ...string) string {
 	return ""
 }
 
-func loadAttachments(config *Config) ([]any, error) {
-	// OpenAI provider does not support attachments
-	if config.Provider == "openai" && len(attachments) > 0 {
-		return nil, &cliError{"--attach is not supported for openai provider (text prompts only)"}
-	}
-
-	var parts []any
-	var totalRawBytes int64
+func loadAttachments(config *Config) ([]Attachment, error) {
+	var parsedAttachments []Attachment
 	var totalEncodedBytes int64
 
 	for _, path := range attachments {
@@ -614,22 +617,21 @@ func loadAttachments(config *Config) ([]any, error) {
 		}
 
 		// Validate image file size (7 MB limit before base64 encoding) - Gemini specific
-		if isImage && len(content) > maxImageSizeBytes {
+		if config.Provider == "gemini" && isImage && len(content) > maxImageSizeBytes {
 			sizeMB := float64(len(content)) / (1024 * 1024)
 			return nil, &inputError{fmt.Sprintf("image file %s exceeds 7 MB limit: %.2f MB (Gemini API limits image files to 7 MB before base64 encoding)", path, sizeMB)}
 		}
 
 		encodedData := base64.StdEncoding.EncodeToString(content)
-		totalRawBytes += int64(len(content))
 		totalEncodedBytes += int64(len(encodedData))
 
-		part := map[string]any{
-			"inlineData": map[string]any{
-				"mimeType": mimeType,
-				"data":     encodedData,
-			},
-		}
-		parts = append(parts, part)
+		parsedAttachments = append(parsedAttachments, Attachment{
+			Path:        path,
+			Filename:    filepath.Base(path),
+			MIMEType:    mimeType,
+			EncodedData: encodedData,
+			IsImage:     isImage,
+		})
 
 		if config.Verbose {
 			if isImage {
@@ -642,28 +644,38 @@ func loadAttachments(config *Config) ([]any, error) {
 	}
 
 	// Validate total attachment size doesn't approach the 20 MB request limit (Gemini specific)
-	const maxAttachmentBytes = 20 * 1024 * 1024
-	if totalEncodedBytes > maxAttachmentBytes {
+	if config.Provider == "gemini" && totalEncodedBytes > maxTotalSizeBytes {
 		totalMB := float64(totalEncodedBytes) / (1024 * 1024)
-		return nil, &inputError{fmt.Sprintf("total attachment size exceeds limit: %.2f MB encoded (limit 20 MB)", totalMB)}
+		return nil, &inputError{fmt.Sprintf("total attachment size exceeds limit: %.2f MB encoded (Gemini limit is 20 MB)", totalMB)}
 	}
 
 	if len(attachments) > 0 && config.Verbose {
 		totalMB := float64(totalEncodedBytes) / (1024 * 1024)
-		fmt.Fprintf(os.Stderr, "Total attachments: %d files, %.2f MB (encoded) - within limits\n", len(attachments), totalMB)
+		if config.Provider == "gemini" {
+			fmt.Fprintf(os.Stderr, "Total attachments: %d files, %.2f MB (encoded) - within Gemini limits\n", len(attachments), totalMB)
+		} else {
+			fmt.Fprintf(os.Stderr, "Total attachments: %d files, %.2f MB (encoded)\n", len(attachments), totalMB)
+		}
 	}
 
-	return parts, nil
+	return parsedAttachments, nil
 }
 
-func buildGeminiRequest(config *Config, attachmentParts []any) ([]byte, error) {
+func buildGeminiRequest(config *Config, attachmentData []Attachment) ([]byte, error) {
 	// Build parts array with prompt text and attachments
 	contentParts := []any{
 		map[string]any{
 			"text": config.Prompt,
 		},
 	}
-	contentParts = append(contentParts, attachmentParts...)
+	for _, attachment := range attachmentData {
+		contentParts = append(contentParts, map[string]any{
+			"inlineData": map[string]any{
+				"mimeType": attachment.MIMEType,
+				"data":     attachment.EncodedData,
+			},
+		})
+	}
 
 	request := map[string]any{
 		"systemInstruction": map[string]any{
@@ -853,7 +865,7 @@ func callGeminiAPI(config *Config, requestBody []byte) (string, error) {
 }
 
 // buildOpenAIRequest creates a Chat Completions API request body with structured outputs
-func buildOpenAIRequest(config *Config) ([]byte, error) {
+func buildOpenAIRequest(config *Config, attachmentData []Attachment) ([]byte, error) {
 	// Build the request using OpenAI Chat Completions format with structured outputs
 	// The response_format with json_schema enforces structured output
 	jsonSchemaConfig := map[string]any{
@@ -866,6 +878,40 @@ func buildOpenAIRequest(config *Config) ([]byte, error) {
 		jsonSchemaConfig["strict"] = true
 	}
 
+	userContent := any(config.Prompt)
+	if len(attachmentData) > 0 {
+		// Chat Completions multimodal content blocks for inline files:
+		// - Images use `type: image_url` with a base64 data URL.
+		// - PDFs use `type: file` with `file_data` and `filename`.
+		contentParts := []any{
+			map[string]any{
+				"type": "text",
+				"text": config.Prompt,
+			},
+		}
+
+		for _, attachment := range attachmentData {
+			if attachment.IsImage {
+				contentParts = append(contentParts, map[string]any{
+					"type": "image_url",
+					"image_url": map[string]any{
+						"url": fmt.Sprintf("data:%s;base64,%s", attachment.MIMEType, attachment.EncodedData),
+					},
+				})
+			} else {
+				contentParts = append(contentParts, map[string]any{
+					"type": "file",
+					"file": map[string]any{
+						"filename":  attachment.Filename,
+						"file_data": fmt.Sprintf("data:%s;base64,%s", attachment.MIMEType, attachment.EncodedData),
+					},
+				})
+			}
+		}
+
+		userContent = contentParts
+	}
+
 	request := map[string]any{
 		"model": config.Model,
 		"messages": []map[string]any{
@@ -875,7 +921,7 @@ func buildOpenAIRequest(config *Config) ([]byte, error) {
 			},
 			{
 				"role":    "user",
-				"content": config.Prompt,
+				"content": userContent,
 			},
 		},
 		"response_format": map[string]any{
