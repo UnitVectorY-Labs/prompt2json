@@ -21,7 +21,9 @@ Each example demonstrates a different capability. Examples using the Gemini prov
 {: .highlight }
 The `--provider` flag is required. Refer to [Google's latest stable models](https://docs.cloud.google.com/vertex-ai/generative-ai/docs/learn/model-versions#latest-stable) for Gemini and [OpenAI's models](https://platform.openai.com/docs/models) for OpenAI.
 
-## Text Analysis (Gemini)
+## Text Analysis
+
+### Gemini
 
 Classify text sentiment from STDIN with inline system instruction and JSON schema with output to STDOUT.
 
@@ -43,7 +45,7 @@ echo "this is great" | prompt2json \
 {"sentiment":"POSITIVE","confidence":95}
 ```
 
-## Text Analysis (OpenAI)
+### OpenAI
 
 The same text classification using an OpenAI-compatible Chat Completions endpoint.
 
@@ -52,7 +54,7 @@ echo "this is great" | prompt2json \
     --provider openai \
     --system-instruction "Classify sentiment as POSITIVE, NEGATIVE, or NEUTRAL" \
     --schema '{"type":"object","properties":{"sentiment":{"type":"string","enum":["POSITIVE","NEGATIVE","NEUTRAL"]},"confidence":{"type":"integer","minimum":0,"maximum":100}},"required":["sentiment","confidence"]}' \
-    --model gpt-4o \
+    --model gpt-5-nano  \
     --api-key "$OPENAI_API_KEY"
 ```
 
@@ -62,7 +64,7 @@ echo "this is great" | prompt2json \
 {"sentiment":"POSITIVE","confidence":95}
 ```
 
-## Text Analysis (OpenAI with Ollama)
+#### OpenAI Endpoint on Ollama
 
 Use a local Ollama server with the openai provider:
 
@@ -72,18 +74,38 @@ echo "this is great" | prompt2json \
     --url "http://localhost:11434/v1/chat/completions" \
     --system-instruction "Classify sentiment as POSITIVE, NEGATIVE, or NEUTRAL" \
     --schema '{"type":"object","properties":{"sentiment":{"type":"string"}},"required":["sentiment"]}' \
-    --model llama3
+    --model llama3.2
 ```
+
+#### OpenAI Endpoint on Vertex AI
+
+Google provides an OpenAI-compatible API on Vertex AI. Use the openai provider with the `--url` flag to target this endpoint and provide the necessary access token. Note that the model names are prefixed with "google/" and the URL includes the project and location.
+
+```bash
+prompt2json \
+  --prompt "this is great" \
+  --provider openai \
+  --url "https://aiplatform.googleapis.com/v1beta1/projects/${GOOGLE_CLOUD_PROJECT}/locations/global/endpoints/openapi/chat/completions" \
+  --api-key "$(gcloud auth application-default print-access-token)" \
+  --model "google/gemini-2.5-flash" \
+  --system-instruction "Classify sentiment as POSITIVE, NEGATIVE, or NEUTRAL" \
+  --schema '{"type":"object","properties":{"sentiment":{"type":"string","enum":["POSITIVE","NEGATIVE","NEUTRAL"]},"confidence":{"type":"integer","minimum":0,"maximum":100}},"required":["sentiment","confidence"]}'
+```
+
 
 {: .note }
 When using `--url` with the openai provider, the `--api-key` is optional. This allows using local servers that don't require authentication.
 
-## Image Processing (Gemini only)
+## Attachments
+
+### Image Processing
 
 Process an image attachment to extract structured information.
 
 {: .note }
-Attach a file using the `--attach` flag for the LLM to process directly. Supported formats include `.png`, `.jpg`, `.jpeg`, `.webp`, and `.pdf`. Attachments are only supported with the Gemini provider.
+Attach a file using the `--attach` flag. Supported formats include `.png`, `.jpg`, `.jpeg`, `.webp`, and `.pdf`. Files are included as inline base64-encoded data in the request payload. The file extension is used to determine the content type, which is sent in the request metadata. Support for attachments varies based on provider and individual LLM that is being used.
+
+#### Gemini
 
 ```bash
 prompt2json \
@@ -91,9 +113,23 @@ prompt2json \
     --prompt "Identify the character in this photo" \
     --system-instruction "Extract the character name, franchise they belong to, and your confidence level" \
     --schema '{"type":"object","properties":{"name":{"type":"string"},"franchise":{"type":"string"},"confidence":{"type":"integer","minimum":0,"maximum":100}},"required":["name","franchise","confidence"]}' \
-    --attach character.png \
+    --attach picture.png \
     --location us-central1 \
     --model gemini-2.5-flash \
+    --pretty-print
+```
+
+#### OpenAI
+
+```bash
+prompt2json \
+    --provider openai \
+    --prompt "Identify the character in this photo" \
+    --system-instruction "Extract the character name, franchise they belong to, and your confidence level" \
+    --schema '{"type":"object","properties":{"name":{"type":"string"},"franchise":{"type":"string"},"confidence":{"type":"integer","minimum":0,"maximum":100}},"required":["name","franchise","confidence"]}' \
+    --attach picture.png \
+    --model gpt-5-nano  \
+    --api-key "$OPENAI_API_KEY" \
     --pretty-print
 ```
 
@@ -101,15 +137,17 @@ prompt2json \
 
 ```json
 {
-  "name": "Grogu",
-  "franchise": "Star Wars",
-  "confidence": 99
+  "name": "Eevee",
+  "franchise": "Pokemon",
+  "confidence": 100
 }
 ```
 
-## PDF Processing (Gemini only)
+### PDF Processing
 
 Extract structured data from a PDF document.
+
+#### Gemini
 
 ```bash
 prompt2json \
@@ -120,6 +158,20 @@ prompt2json \
     --attach resume.pdf \
     --location us-central1 \
     --model gemini-2.5-flash \
+    --pretty-print
+```
+
+#### OpenAI
+
+```bash
+prompt2json \
+    --provider openai \
+    --prompt "Resume attached" \
+    --system-instruction "Extract basic screening information from the resume. Do not infer missing details." \
+    --schema '{"type":"object","properties":{"name":{"type":"string"},"current_role":{"type":"string"},"years_experience":{"type":"integer"},"skills":{"type":"array","items":{"type":"string"}}},"required":["name","current_role","skills"]}' \
+    --attach resume.pdf \
+    --model gpt-5-nano  \
+    --api-key "$OPENAI_API_KEY" \
     --pretty-print
 ```
 
@@ -139,7 +191,9 @@ prompt2json \
 }
 ```
 
-## Using External Files for Instructions and Schema
+## File-Based Workflows
+
+### Using External Files for Instructions and Schema
 
 Load system instructions and JSON schema from files instead of inline strings. This approach is cleaner for complex prompts and reusable schemas.
 
@@ -196,7 +250,7 @@ cat ticket.txt | prompt2json \
 {"department":"TECHNICAL","priority":"HIGH","summary":"User cannot access dashboard after login"}
 ```
 
-## Files for Input and Output
+### Files for Input and Output
 
 Process files and save output to a file.
 
@@ -241,14 +295,16 @@ prompt2json \
 }
 ```
 
-## Dry-run: Show Request URL
+## Dry-Run
+
+### Show Request URL
 
 Output the API URL that is used when making the request. This is useful for debugging and understanding which endpoint is being targeted.
 
 {: .note }
 The actual request is not made when using the `--show-url` flag.
 
-### Gemini URL
+#### Gemini URL
 
 ```bash
 echo "this is great" | prompt2json \
@@ -267,14 +323,14 @@ echo "this is great" | prompt2json \
 https://us-central1-aiplatform.googleapis.com/v1/projects/example-project/locations/us-central1/publishers/google/models/gemini-2.5-flash:generateContent
 ```
 
-### OpenAI URL
+#### OpenAI URL
 
 ```bash
 echo "this is great" | prompt2json \
     --provider openai \
     --system-instruction "Classify sentiment" \
     --schema '{"type":"object","properties":{"sentiment":{"type":"string"}},"required":["sentiment"]}' \
-    --model gpt-4o \
+    --model gpt-5-nano  \
     --show-url
 ```
 
@@ -284,7 +340,7 @@ echo "this is great" | prompt2json \
 https://api.openai.com/v1/chat/completions
 ```
 
-## Dry-run: Show Request Body
+### Show Request Body
 
 Output the JSON request body that would be sent to the API. This is useful for debugging request structure and verifying the prompt and schema are formatted correctly.
 
@@ -292,7 +348,7 @@ Output the JSON request body that would be sent to the API. This is useful for d
 The actual request is not made when using the `--show-request-body` flag.
 The `--pretty-print` flag formats the JSON output for better readability.
 
-### Gemini Request Body
+#### Gemini Request Body
 
 ```bash
 echo "this is great" | prompt2json \
@@ -355,14 +411,16 @@ echo "this is great" | prompt2json \
 }
 ```
 
-### OpenAI Request Body
+#### OpenAI Request Body (with inline image)
 
 ```bash
-echo "this is great" | prompt2json \
+prompt2json \
     --provider openai \
-    --system-instruction "Classify sentiment" \
-    --schema '{"type":"object","properties":{"sentiment":{"type":"string"}},"required":["sentiment"]}' \
-    --model gpt-4o \
+    --prompt "Identify the character in this photo" \
+    --system-instruction "Extract the character name, franchise they belong to, and your confidence level" \
+    --schema '{"type":"object","properties":{"name":{"type":"string"},"franchise":{"type":"string"},"confidence":{"type":"integer","minimum":0,"maximum":100}},"required":["name","franchise","confidence"]}' \
+    --attach picture.png \
+    --model gpt-5-nano  \
     --show-request-body \
     --pretty-print
 ```
@@ -373,26 +431,47 @@ echo "this is great" | prompt2json \
 {
   "messages": [
     {
-      "content": "Classify sentiment",
+      "content": "Extract the character name, franchise they belong to, and your confidence level",
       "role": "system"
     },
     {
-      "content": "this is great",
+      "content": [
+        {
+          "text": "Identify the character in this photo",
+          "type": "text"
+        },
+        {
+          "image_url": {
+            "url": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAdsA..."
+          },
+          "type": "image_url"
+        }
+      ],
       "role": "user"
     }
   ],
-  "model": "gpt-4o",
+  "model": "gpt-5-nano",
   "response_format": {
     "json_schema": {
       "name": "response",
       "schema": {
         "properties": {
-          "sentiment": {
+          "confidence": {
+            "maximum": 100,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "franchise": {
+            "type": "string"
+          },
+          "name": {
             "type": "string"
           }
         },
         "required": [
-          "sentiment"
+          "name",
+          "franchise",
+          "confidence"
         ],
         "type": "object"
       }

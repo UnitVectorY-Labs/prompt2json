@@ -6,6 +6,13 @@ permalink: /usage
 ---
 
 # Usage
+{: .no_toc }
+
+## Table of Contents
+{: .no_toc .text-delta }
+
+- TOC
+{:toc}
 
 The `prompt2json` application follows Unix-style CLI conventions and can be used in shell pipelines, scripts, and data processing jobs.
 
@@ -121,12 +128,7 @@ Options always take precedence over environment variables.
 
 ## Attachment Support
 
-| Provider | Supported Types | Limits |
-|----------|-----------------|--------|
-| `gemini` | `.png`, `.jpg`, `.jpeg`, `.webp`, `.pdf` | 7 MB per image, 20 MB total |
-| `openai` | Not supported | Text prompts only |
-
-Using `--attach` with `--provider=openai` will result in an error.
+The files types of `png`, `jpg`, `jpeg`, `webp`, and `pdf` are supported as inline attachments for both providers. The files are included as inline base64-encoded data in the request payload. The file extension is used to determine the content type, which is sent in the request metadata. Support for attachments varies based on provider and individual LLM that is being used.
 
 ## Command Line
 
@@ -161,6 +163,6 @@ Both dry-run modes work with all providers.
 - Exactly one schema source is required
 - Prompt is read from a flag or STDIN and must be non empty
 - JSON Schema must be valid and compilable
-- Attachments must be supported types and within size limits (gemini only)
+- Attachments must be supported types and within provider-specific limits
 - The JSON output will be validated against the provided JSON Schema client side before returning
 - Invalid combinations or missing inputs fail before any API call.

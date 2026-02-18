@@ -3,7 +3,7 @@
 
 # prompt2json
 
-Unix-style CLI that sends a system instruction, required JSON Schema, and text inputs to LLM APIs and returns schema-validated JSON for easy batch processing. Supports Vertex AI (Gemini) and OpenAI-compatible Chat Completions endpoints.
+Unix-style CLI that sends a system instruction, required JSON Schema, and text or inline file inputs to LLM APIs and returns schema-validated JSON for easy batch processing. Supports Vertex AI (Gemini) and OpenAI-compatible Chat Completions endpoints.
 
 ## Overview
 
@@ -108,14 +108,12 @@ For complete usage documentation including all options, environment variables, a
 
 ## Attachment Support
 
-| Provider | Attachments |
-|----------|-------------|
-| `gemini` | Supports png, jpg, jpeg, webp, pdf (7 MB per image, 20 MB total) |
-| `openai` | Text prompts only; attachments are not supported |
+The files types of `png`, `jpg`, `jpeg`, `webp`, and `pdf` are supported as inline attachments for both providers. The files are included as inline base64-encoded data in the request payload. The file extension is used to determine the content type, which is sent in the request metadata. Support for attachments varies based on provider and individual LLM that is being used.
 
 ## Limitations
 
 - Gemini: Image attachments are limited to 7 MB each before base64 encoding
 - Gemini: Total request size is limited to roughly 20 MB
-- OpenAI: File attachments are not supported (text prompts only)
+- OpenAI: Attachments are sent inline (`image_url` / `file_data`) and require a model and endpoint that support multimodal Chat Completions
+- OpenAI-compatible endpoints (for example, some Ollama setups) may reject multimodal attachment payloads even though text-only requests work
 - Limitations of the underlying LLM models apply
