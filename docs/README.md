@@ -11,7 +11,7 @@ Unix-style CLI that brings English-as-Code to your command line. Define behavior
 
 ## What it does
 
-- Turn free form prompts into machine reliable JSON for automation and batch workflows
+- Turn free form prompts into machine reliable JSON for automation in bash workflows
 - Enforce output shape using JSON Schema rather than post processing heuristics
 - Make LLMs usable in shell pipelines, scripts, and data processing jobs
 - Enable repeatable, inspectable prompt experiments from the command line

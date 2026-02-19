@@ -14,13 +14,19 @@ permalink: /install
 - TOC
 {:toc}
 
-## Download Binary
+## Installation Methods
 
-Download pre-built binaries from the [GitHub Releases](https://github.com/UnitVectorY-Labs/prompt2json/releases) page.
+There are several ways to install `prompt2json`:
+
+### Download Binary
+
+Download pre-built binaries from the [GitHub Releases](https://github.com/UnitVectorY-Labs/prompt2json/releases) page for the latest version.
+
+[![GitHub release](https://img.shields.io/github/release/UnitVectorY-Labs/prompt2json.svg)](https://github.com/UnitVectorY-Labs/prompt2json/releases/latest) 
 
 Choose the appropriate binary for your platform and add it to your PATH.
 
-## Install Using Go
+### Install Using Go
 
 Install directly from the Go toolchain:
 
@@ -28,7 +34,7 @@ Install directly from the Go toolchain:
 go install github.com/UnitVectorY-Labs/prompt2json@latest
 ```
 
-## Build from Source
+### Build from Source
 
 Build the application from source code:
 
@@ -44,7 +50,7 @@ go build -o prompt2json
 
 `prompt2json` requires Google Cloud credentials to access Gemini models when using the Gemini provider (`--provider gemini`).
 
-{: .important }
+{: .warning }
 You will be charged for usage of Gemini models according to [Google Cloud's pricing](https://cloud.google.com/vertex-ai/pricing#generative_ai_models).
 
 Authenticate locally:
@@ -66,6 +72,9 @@ export GOOGLE_CLOUD_PROJECT=your-project-id
 ```
 
 ### OpenAI Provider
+
+{: .warning }
+You will be charged for usage of OpenAI models according to [OpenAI's pricing](https://openai.com/api/pricing/).
 
 When using the OpenAI provider (`--provider openai`), an API key is required when using the default OpenAI URL:
 

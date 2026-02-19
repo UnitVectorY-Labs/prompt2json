@@ -64,7 +64,10 @@ echo "this is great" | prompt2json \
 {"sentiment":"POSITIVE","confidence":95}
 ```
 
-#### OpenAI Endpoint on Ollama
+### OpenAI Endpoint on Ollama
+
+{: .note }
+When using `--url` with the openai provider, the `--api-key` is optional. This allows using local servers that don't require authentication.
 
 Use a local Ollama server with the openai provider:
 
@@ -77,7 +80,7 @@ echo "this is great" | prompt2json \
     --model llama3.2
 ```
 
-#### OpenAI Endpoint on Vertex AI
+### OpenAI Endpoint on Vertex AI
 
 Google provides an OpenAI-compatible API on Vertex AI. Use the openai provider with the `--url` flag to target this endpoint and provide the necessary access token. Note that the model names are prefixed with "google/" and the URL includes the project and location.
 
@@ -91,10 +94,6 @@ prompt2json \
   --system-instruction "Classify sentiment as POSITIVE, NEGATIVE, or NEUTRAL" \
   --schema '{"type":"object","properties":{"sentiment":{"type":"string","enum":["POSITIVE","NEGATIVE","NEUTRAL"]},"confidence":{"type":"integer","minimum":0,"maximum":100}},"required":["sentiment","confidence"]}'
 ```
-
-
-{: .note }
-When using `--url` with the openai provider, the `--api-key` is optional. This allows using local servers that don't require authentication.
 
 ## Attachments
 
@@ -301,7 +300,7 @@ prompt2json \
 
 Output the API URL that is used when making the request. This is useful for debugging and understanding which endpoint is being targeted.
 
-{: .note }
+{: .highlight }
 The actual request is not made when using the `--show-url` flag.
 
 #### Gemini URL
@@ -344,7 +343,7 @@ https://api.openai.com/v1/chat/completions
 
 Output the JSON request body that would be sent to the API. This is useful for debugging request structure and verifying the prompt and schema are formatted correctly.
 
-{: .note }
+{: .highlight }
 The actual request is not made when using the `--show-request-body` flag.
 The `--pretty-print` flag formats the JSON output for better readability.
 

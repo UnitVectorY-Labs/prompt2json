@@ -9,7 +9,7 @@ Unix-style CLI that sends a system instruction, required JSON Schema, and text o
 
 `prompt2json` is designed for composable command line workflows:
 
-- Turn free form prompts into machine reliable JSON for automation and batch workflows
+- Turn free form prompts into machine reliable JSON for automation in bash workflows
 - Enforce output shape using JSON Schema rather than post processing heuristics
 - Make LLMs usable in shell pipelines, scripts, and data processing jobs
 - Enable repeatable, inspectable prompt experiments from the command line
