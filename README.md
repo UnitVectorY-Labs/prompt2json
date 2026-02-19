@@ -45,35 +45,38 @@ go build -o prompt2json
 ### Gemini Provider
 
 ```bash
-export GOOGLE_CLOUD_PROJECT=example-project
-echo "this is great" | prompt2json \
+prompt2json \
     --provider gemini \
+    --prompt "this is great" \
     --system-instruction "Classify sentiment" \
     --schema '{"type":"object","properties":{"sentiment":{"type":"string","enum":["POSITIVE","NEGATIVE","NEUTRAL"]},"confidence":{"type":"integer","minimum":0,"maximum":100}},"required":["sentiment","confidence"]}' \
     --location us-central1 \
+    --project example-project \
     --model gemini-2.5-flash
 ```
 
 ### OpenAI Provider
 
 ```bash
-echo "this is great" | prompt2json \
+prompt2json \
     --provider openai \
+    --prompt "this is great" \
     --system-instruction "Classify sentiment" \
     --schema '{"type":"object","properties":{"sentiment":{"type":"string","enum":["POSITIVE","NEGATIVE","NEUTRAL"]},"confidence":{"type":"integer","minimum":0,"maximum":100}},"required":["sentiment","confidence"]}' \
-    --model gpt-4o \
+    --model gpt-5-nano \
     --api-key "$OPENAI_API_KEY"
 ```
 
 ### OpenAI Provider with Ollama (local)
 
 ```bash
-echo "this is great" | prompt2json \
+prompt2json \
     --provider openai \
     --url "http://localhost:11434/v1/chat/completions" \
+    --prompt "this is great" \
     --system-instruction "Classify sentiment" \
     --schema '{"type":"object","properties":{"sentiment":{"type":"string"}},"required":["sentiment"]}' \
-    --model llama3
+    --model llama3.2
 ```
 
 The output will be minified JSON matching the specified schema:
