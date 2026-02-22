@@ -15,6 +15,8 @@ Unix-style CLI that sends a system instruction, required JSON Schema, and text o
 - Enable repeatable, inspectable prompt experiments from the command line
 - Treat LLM calls as deterministic interfaces, not interactive sessions
 
+![prompt2json diagram](docs/diagram.svg)
+
 ## Providers
 
 The `--provider` flag is required and determines which API format to use:
