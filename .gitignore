@@ -2,6 +2,7 @@
 # Edit at https://www.toptal.com/developers/gitignore?templates=macos,eclipse,windows,intellij,visualstudiocode,go
 
 prompt2json
+.env
 
 ### Eclipse ###
 .metadata
