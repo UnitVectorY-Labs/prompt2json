@@ -46,7 +46,7 @@ These options work with all providers:
 | `--model`                  | name  | yes      | Model identifier                                    |
 | `--url`                    | url   | no       | Override default API URL                            |
 | `--api-key`                | key   | no*      | API key for bearer auth (see authentication)        |
-| `--timeout`                | int   | no       | HTTP request timeout in seconds; default is 60      |
+| `--timeout`                | int   | no       | HTTP request timeout in seconds; default is 300 for remote APIs and disabled for localhost URLs |
 | `--out`                    | path  | no       | Output file path; defaults to STDOUT if not set     |
 | `--pretty-print`           |       | no       | Pretty-print JSON output; default is minified       |
 | `--show-url`               |       | no       | Output the API URL without making the request       |
@@ -115,6 +115,9 @@ export OPENAI_API_KEY="your-api-key"
 ```
 
 When using `--url` with the openai provider (for local servers like Ollama), the API key is optional.
+
+{: .highlight }
+For localhost URLs, the default HTTP timeout is disabled so slower local inference can complete. Set `--timeout` to enforce a deadline, or use `--timeout 0` to disable it explicitly.
 
 ## Environment Variables
 
