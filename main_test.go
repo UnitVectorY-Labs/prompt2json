@@ -293,6 +293,56 @@ func TestBuildAPIURL(t *testing.T) {
 	}
 }
 
+func TestResolveHTTPTimeout(t *testing.T) {
+	tests := []struct {
+		name   string
+		config Config
+		want   string
+	}{
+		{
+			name: "explicit timeout is respected",
+			config: Config{
+				Provider: "openai",
+				Timeout:  15,
+			},
+			want: "15s",
+		},
+		{
+			name: "remote openai uses default timeout",
+			config: Config{
+				Provider: "openai",
+				Timeout:  autoTimeoutSeconds,
+			},
+			want: "5m0s",
+		},
+		{
+			name: "localhost openai disables timeout",
+			config: Config{
+				Provider: "openai",
+				URL:      "http://localhost:11434/v1/chat/completions",
+				Timeout:  autoTimeoutSeconds,
+			},
+			want: "0s",
+		},
+		{
+			name: "loopback ip disables timeout",
+			config: Config{
+				Provider: "openai",
+				URL:      "http://127.0.0.1:11434/v1/chat/completions",
+				Timeout:  autoTimeoutSeconds,
+			},
+			want: "0s",
+		},
+	}
+
+	for _, tc := range tests {
+		got := resolveHTTPTimeout(&tc.config).String()
+		if got != tc.want {
+			t.Fatalf("%s: expected %q, got %q", tc.name, tc.want, got)
+		}
+	}
+}
+
 func TestGetConfigValuePrecedence(t *testing.T) {
 	t.Setenv("PROMPT2JSON_ENV_ONE", "from-env-one")
 	t.Setenv("PROMPT2JSON_ENV_TWO", "from-env-two")

@@ -8,7 +8,9 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
+	neturl "net/url"
 	"os"
 	"path/filepath"
 	"runtime/debug"
@@ -43,6 +45,11 @@ const (
 
 // Default OpenAI-compatible API URL
 const defaultOpenAIURL = "https://api.openai.com/v1/chat/completions"
+
+const (
+	defaultRemoteTimeoutSeconds = 300
+	autoTimeoutSeconds          = -1
+)
 
 // CLI flags
 var (
@@ -202,7 +209,7 @@ func defineFlags() {
 	flag.StringVar(&urlFlag, "url", "", "Override API URL (universal)")
 	flag.StringVar(&apiKeyFlag, "api-key", "", "API key for bearer auth (universal)")
 	flag.BoolVar(&strictSchemaFlag, "strict-schema", false, "Enable strict mode for JSON schema validation (openai only)")
-	flag.IntVar(&timeout, "timeout", 60, "HTTP request timeout in seconds (default: 60)")
+	flag.IntVar(&timeout, "timeout", autoTimeoutSeconds, "HTTP request timeout in seconds (default: auto)")
 	flag.BoolVar(&verbose, "verbose", false, "Enable verbose logging to STDERR")
 	flag.BoolVar(&prettyPrint, "pretty-print", false, "Pretty-print JSON output")
 	flag.BoolVar(&showVersion, "version", false, "Show version")
@@ -261,7 +268,8 @@ Dry-run (debug):
   --show-request-body        Output the JSON request body without making the request
 
 Misc:
-  --timeout SECONDS          HTTP request timeout in seconds (default: 60)
+  --timeout SECONDS          HTTP request timeout in seconds
+                             default: 300 for remote APIs, disabled for localhost
   --verbose                  Log diagnostics to stderr
   --version                  Print version and exit
   --help                     Print help and exit
@@ -546,8 +554,8 @@ func loadConfiguration() (*Config, error) {
 	}
 
 	// Validate timeout
-	if timeout < 0 {
-		return nil, &cliError{"--timeout must be non-negative"}
+	if timeout < autoTimeoutSeconds {
+		return nil, &cliError{"--timeout must be 0 or greater (-1 is reserved for automatic defaults)"}
 	}
 	config.Timeout = timeout
 
@@ -735,6 +743,37 @@ func buildAPIURL(config *Config) string {
 	return buildGeminiURL(config)
 }
 
+func resolveHTTPTimeout(config *Config) time.Duration {
+	if config.Timeout >= 0 {
+		return time.Duration(config.Timeout) * time.Second
+	}
+
+	if isLoopbackURL(buildAPIURL(config)) {
+		return 0
+	}
+
+	return defaultRemoteTimeoutSeconds * time.Second
+}
+
+func isLoopbackURL(rawURL string) bool {
+	parsedURL, err := neturl.Parse(rawURL)
+	if err != nil {
+		return false
+	}
+
+	host := parsedURL.Hostname()
+	if host == "" {
+		return false
+	}
+
+	if strings.EqualFold(host, "localhost") {
+		return true
+	}
+
+	ip := net.ParseIP(host)
+	return ip != nil && ip.IsLoopback()
+}
+
 func callGeminiAPI(config *Config, requestBody []byte) (string, error) {
 	ctx := context.Background()
 
@@ -775,7 +814,7 @@ func callGeminiAPI(config *Config, requestBody []byte) (string, error) {
 
 	// Send request
 	client := &http.Client{
-		Timeout: time.Duration(config.Timeout) * time.Second,
+		Timeout: resolveHTTPTimeout(config),
 	}
 	resp, err := client.Do(req)
 	if err != nil {
@@ -969,7 +1008,7 @@ func callOpenAIAPI(config *Config, requestBody []byte) (string, error) {
 
 	// Send request
 	client := &http.Client{
-		Timeout: time.Duration(config.Timeout) * time.Second,
+		Timeout: resolveHTTPTimeout(config),
 	}
 	resp, err := client.Do(req)
 	if err != nil {

@@ -69,6 +69,9 @@ echo "this is great" | prompt2json \
 {: .note }
 When using `--url` with the openai provider, the `--api-key` is optional. This allows using local servers that don't require authentication.
 
+{: .highlight }
+For localhost URLs, the default HTTP timeout is disabled. Set `--timeout` if you want a deadline.
+
 Use a local Ollama server with the openai provider:
 
 ```bash
