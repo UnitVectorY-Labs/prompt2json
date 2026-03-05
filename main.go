@@ -20,6 +20,7 @@ import (
 	"github.com/UnitVectorY-Labs/gcpvalidate/location"
 	"github.com/UnitVectorY-Labs/gcpvalidate/project"
 	"github.com/UnitVectorY-Labs/gcpvalidate/vertexai"
+	jsp "github.com/UnitVectorY-Labs/jsonschemaprofiles"
 	"github.com/santhosh-tekuri/jsonschema/v5"
 	"golang.org/x/oauth2/google"
 )
@@ -68,6 +69,7 @@ var (
 	urlFlag               string
 	apiKeyFlag            string
 	strictSchemaFlag      bool
+	schemaProfileFlag     string
 	timeout               int
 	verbose               bool
 	prettyPrint           bool
@@ -209,6 +211,7 @@ func defineFlags() {
 	flag.StringVar(&urlFlag, "url", "", "Override API URL (universal)")
 	flag.StringVar(&apiKeyFlag, "api-key", "", "API key for bearer auth (universal)")
 	flag.BoolVar(&strictSchemaFlag, "strict-schema", false, "Enable strict mode for JSON schema validation (openai only)")
+	flag.StringVar(&schemaProfileFlag, "schema-profile", "", "Override schema profile for validation (e.g., OPENAI_202602, GEMINI_202602, MINIMAL_202602)")
 	flag.IntVar(&timeout, "timeout", autoTimeoutSeconds, "HTTP request timeout in seconds (default: auto)")
 	flag.BoolVar(&verbose, "verbose", false, "Enable verbose logging to STDERR")
 	flag.BoolVar(&prettyPrint, "pretty-print", false, "Pretty-print JSON output")
@@ -249,6 +252,12 @@ Gemini-only (required unless --url is provided):
 
 OpenAI-only:
   --strict-schema            Enable strict mode for JSON schema validation
+
+Schema profile:
+  --schema-profile PROFILE   Override schema profile for validation
+                             Default: OPENAI_202602 (openai), GEMINI_202602 (gemini)
+                             Available: OPENAI_202602, GEMINI_202602, GEMINI_202503, MINIMAL_202602
+                             See: https://jsonschemaprofiles.unitvectorylabs.com/
 
 Universal overrides:
   --url URL                  Override provider's default API URL
@@ -337,6 +346,7 @@ type Config struct {
 	URL                  string // Override URL
 	APIKey               string // Bearer token
 	StrictSchema         bool   // OpenAI only: enable strict mode for JSON schema
+	SchemaProfile        string // Override schema profile for validation
 	Timeout              int
 	OutFile              string
 	Verbose              bool
@@ -432,6 +442,24 @@ func loadConfiguration() (*Config, error) {
 		} else {
 			fmt.Fprintf(os.Stderr, "Schema: %d bytes (from %s) - valid JSON\n", len(schemaBytes), config.SchemaSrc)
 		}
+	}
+
+	// Validate schema against provider-specific profile using jsonschemaprofiles
+	profileID := resolveSchemaProfile(provider, schemaProfileFlag)
+	config.SchemaProfile = string(profileID)
+
+	report, err := jsp.ValidateSchema(profileID, schemaBytes, nil)
+	if err != nil {
+		return nil, &inputError{fmt.Sprintf("schema profile validation failed: %v", err)}
+	}
+
+	if !report.Valid {
+		fmt.Fprintf(os.Stderr, "Schema profile validation (%s):\n%s", profileID, report.Text())
+		return nil, &inputError{fmt.Sprintf("schema does not conform to %s profile; see https://jsonschemaprofiles.unitvectorylabs.com/ for details on schema limitations", profileID)}
+	}
+
+	if verbose {
+		fmt.Fprintf(os.Stderr, "Schema profile validation (%s): PASSED\n", profileID)
 	}
 
 	// Compile the JSON Schema once for reuse
@@ -578,6 +606,17 @@ func loadConfiguration() (*Config, error) {
 	}
 
 	return config, nil
+}
+
+// resolveSchemaProfile determines which schema profile to use based on provider and optional override.
+func resolveSchemaProfile(provider string, override string) jsp.ProfileID {
+	if override != "" {
+		return jsp.ProfileID(override)
+	}
+	if provider == "openai" {
+		return jsp.OPENAI_202602
+	}
+	return jsp.GEMINI_202602
 }
 
 func getConfigValue(flagValue string, envVars ...string) string {

@@ -10,6 +10,7 @@ import (
 	"strings"
 	"testing"
 
+	jsp "github.com/UnitVectorY-Labs/jsonschemaprofiles"
 	"github.com/santhosh-tekuri/jsonschema/v5"
 )
 
@@ -565,4 +566,78 @@ func mustCompileSchema(t *testing.T, schemaJSON string) *jsonschema.Schema {
 		t.Fatalf("failed to compile schema: %v", err)
 	}
 	return compiled
+}
+
+func TestResolveSchemaProfile(t *testing.T) {
+	tests := []struct {
+		name     string
+		provider string
+		override string
+		want     jsp.ProfileID
+	}{
+		{
+			name:     "openai default",
+			provider: "openai",
+			override: "",
+			want:     jsp.OPENAI_202602,
+		},
+		{
+			name:     "gemini default",
+			provider: "gemini",
+			override: "",
+			want:     jsp.GEMINI_202602,
+		},
+		{
+			name:     "override with MINIMAL_202602",
+			provider: "openai",
+			override: "MINIMAL_202602",
+			want:     jsp.MINIMAL_202602,
+		},
+		{
+			name:     "override with GEMINI_202602 on openai provider",
+			provider: "openai",
+			override: "GEMINI_202602",
+			want:     jsp.GEMINI_202602,
+		},
+		{
+			name:     "override with OPENAI_202602 on gemini provider",
+			provider: "gemini",
+			override: "OPENAI_202602",
+			want:     jsp.OPENAI_202602,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got := resolveSchemaProfile(tc.provider, tc.override)
+			if got != tc.want {
+				t.Fatalf("expected %s, got %s", tc.want, got)
+			}
+		})
+	}
+}
+
+func TestSchemaProfileValidationValidSchema(t *testing.T) {
+	schemaBytes := []byte(`{"type":"object","properties":{"name":{"type":"string"}},"required":["name"],"additionalProperties":false}`)
+
+	report, err := jsp.ValidateSchema(jsp.OPENAI_202602, schemaBytes, nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !report.Valid {
+		t.Fatalf("expected schema to be valid, got invalid: %s", report.Text())
+	}
+}
+
+func TestSchemaProfileValidationInvalidSchema(t *testing.T) {
+	// Schema with patternProperties, which is not allowed in OpenAI profile
+	schemaBytes := []byte(`{"type":"object","patternProperties":{"^S_":{"type":"string"}}}`)
+
+	report, err := jsp.ValidateSchema(jsp.OPENAI_202602, schemaBytes, nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if report.Valid {
+		t.Fatalf("expected schema to be invalid for OpenAI profile")
+	}
 }
