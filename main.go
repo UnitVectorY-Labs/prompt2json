@@ -454,7 +454,7 @@ func loadConfiguration() (*Config, error) {
 	}
 
 	if !report.Valid {
-		fmt.Fprintf(os.Stderr, "Schema profile validation (%s):\n%s", profileID, report.Text())
+		fmt.Fprintf(os.Stderr, "Schema profile validation (%s):\n%s\n", profileID, report.Text())
 		return nil, &inputError{fmt.Sprintf("schema does not conform to %s profile; see https://jsonschemaprofiles.unitvectorylabs.com/ for details on schema limitations", profileID)}
 	}
 
