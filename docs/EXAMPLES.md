@@ -87,6 +87,9 @@ echo "this is great" | prompt2json \
 
 Google provides an OpenAI-compatible API on Vertex AI. Use the openai provider with the `--url` flag to target this endpoint and provide the necessary access token. Note that the model names are prefixed with "google/" and the URL includes the project and location.
 
+{: .warning }
+When using the `openai` provider to call a Gemini model via Vertex AI's OpenAI-compatible endpoint, the default schema profile is `OPENAI_202602`. Since the backend model is Gemini, use `--schema-profile GEMINI_202602` to validate the schema against the correct provider restrictions. See [Gemini schema profile](https://jsonschemaprofiles.unitvectorylabs.com/schemas/gemini) for details.
+
 ```bash
 prompt2json \
   --prompt "this is great" \
@@ -95,7 +98,8 @@ prompt2json \
   --api-key "$(gcloud auth application-default print-access-token)" \
   --model "google/gemini-2.5-flash" \
   --system-instruction "Classify sentiment as POSITIVE, NEGATIVE, or NEUTRAL" \
-  --schema '{"type":"object","properties":{"sentiment":{"type":"string","enum":["POSITIVE","NEGATIVE","NEUTRAL"]},"confidence":{"type":"integer","minimum":0,"maximum":100}},"required":["sentiment","confidence"]}'
+  --schema '{"type":"object","properties":{"sentiment":{"type":"string","enum":["POSITIVE","NEGATIVE","NEUTRAL"]},"confidence":{"type":"integer","minimum":0,"maximum":100}},"required":["sentiment","confidence"]}' \
+  --schema-profile GEMINI_202602
 ```
 
 ## Attachments

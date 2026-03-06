@@ -40,6 +40,7 @@ These options work with all providers:
 | `--system-instruction-file`| path  | yes*     | Exactly one* of this or `--system-instruction`      |
 | `--schema`                 | json  | yes*     | Exactly one* of this or `--schema-file`             |
 | `--schema-file`            | path  | yes*     | Exactly one* of this or `--schema`                  |
+| `--schema-profile`         | name  | no       | Override schema profile (see Schema Profile Validation) |
 | `--prompt`                 | text  | no       | Mutually exclusive with `--prompt-file`             |
 | `--prompt-file`            | path  | no       | Mutually exclusive with `--prompt`                  |
 | `--attach`                 | path  | no       | Repeatable. See attachment support by provider      |
@@ -77,6 +78,32 @@ These options only apply when `--provider=openai`:
 When `--provider=gemini`, using `--strict-schema` will result in an error.
 
 The `--strict-schema` flag enables OpenAI's [strict mode](https://platform.openai.com/docs/guides/structured-outputs?api-mode=chat) for structured outputs, which will return an error if the JSON schema contains unsupported constructs.
+
+## Schema Profile Validation
+
+Before making any API call, `prompt2json` validates the provided JSON Schema against a provider-specific profile using the [jsonschemaprofiles](https://github.com/UnitVectorY-Labs/jsonschemaprofiles) library. This ensures the schema conforms to the subset of JSON Schema supported by the target provider, catching compatibility issues before a request is sent.
+
+The default profile is automatically selected based on the provider:
+
+| Provider | Default Profile  |
+|----------|------------------|
+| `openai` | `OPENAI_202602`  |
+| `gemini` | `GEMINI_202602`  |
+
+Use the `--schema-profile` flag to override the default:
+
+| Option             | Arg      | Required | Notes                                                     |
+|--------------------|----------|----------|-----------------------------------------------------------|
+| `--schema-profile` | profile  | no       | Override schema profile for validation                    |
+
+Available profiles: `OPENAI_202602`, `GEMINI_202602`, `GEMINI_202503`, `MINIMAL_202602`
+
+If validation fails, errors are reported to STDERR and the program exits before making any API call.
+
+For detailed documentation on schema limitations for each profile, see:
+
+- [OpenAI schema profile](https://jsonschemaprofiles.unitvectorylabs.com/schemas/openai)
+- [Gemini schema profile](https://jsonschemaprofiles.unitvectorylabs.com/schemas/gemini)
 
 ## URL Behavior
 
@@ -166,6 +193,7 @@ Both dry-run modes work with all providers.
 - Exactly one schema source is required
 - Prompt is read from a flag or STDIN and must be non empty
 - JSON Schema must be valid and compilable
+- JSON Schema must conform to the provider-specific [schema profile](https://jsonschemaprofiles.unitvectorylabs.com/) (validated before making any API call)
 - Attachments must be supported types and within provider-specific limits
 - The JSON output will be validated against the provided JSON Schema client side before returning
 - Invalid combinations or missing inputs fail before any API call.
