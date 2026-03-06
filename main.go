@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"crypto/tls"
 	"encoding/base64"
 	"encoding/json"
 	"flag"
@@ -73,6 +74,7 @@ var (
 	timeout               int
 	verbose               bool
 	prettyPrint           bool
+	insecureFlag          bool
 	showVersion           bool
 	showHelp              bool
 	showURL               bool
@@ -215,6 +217,7 @@ func defineFlags() {
 	flag.IntVar(&timeout, "timeout", autoTimeoutSeconds, "HTTP request timeout in seconds (default: auto)")
 	flag.BoolVar(&verbose, "verbose", false, "Enable verbose logging to STDERR")
 	flag.BoolVar(&prettyPrint, "pretty-print", false, "Pretty-print JSON output")
+	flag.BoolVar(&insecureFlag, "insecure", false, "Skip TLS certificate verification (use with caution)")
 	flag.BoolVar(&showVersion, "version", false, "Show version")
 	flag.BoolVar(&showHelp, "help", false, "Show help")
 	flag.BoolVar(&showURL, "show-url", false, "Show the API URL that would be called (dry-run mode)")
@@ -279,6 +282,9 @@ Dry-run (debug):
 Misc:
   --timeout SECONDS          HTTP request timeout in seconds
                              default: 300 for remote APIs, disabled for localhost
+  --insecure                 Skip TLS certificate verification (like curl --insecure)
+                             Use only for development servers with self-signed or
+                             mismatched certificates. Not recommended for production.
   --verbose                  Log diagnostics to stderr
   --version                  Print version and exit
   --help                     Print help and exit
@@ -351,6 +357,7 @@ type Config struct {
 	OutFile              string
 	Verbose              bool
 	PrettyPrint          bool
+	Insecure             bool
 }
 
 type Attachment struct {
@@ -586,6 +593,7 @@ func loadConfiguration() (*Config, error) {
 		return nil, &cliError{"--timeout must be 0 or greater (-1 is reserved for automatic defaults)"}
 	}
 	config.Timeout = timeout
+	config.Insecure = insecureFlag
 
 	if verbose {
 		if config.Provider == "gemini" {
@@ -602,6 +610,9 @@ func loadConfiguration() (*Config, error) {
 			} else {
 				fmt.Fprintf(os.Stderr, "API configuration: url=%s model=%s\n", defaultOpenAIURL, config.Model)
 			}
+		}
+		if config.Insecure {
+			fmt.Fprintf(os.Stderr, "TLS: certificate verification disabled (--insecure)\n")
 		}
 	}
 
@@ -794,6 +805,18 @@ func resolveHTTPTimeout(config *Config) time.Duration {
 	return defaultRemoteTimeoutSeconds * time.Second
 }
 
+func buildHTTPClient(config *Config) *http.Client {
+	client := &http.Client{
+		Timeout: resolveHTTPTimeout(config),
+	}
+	if config.Insecure {
+		client.Transport = &http.Transport{
+			TLSClientConfig: &tls.Config{InsecureSkipVerify: true}, //nolint:gosec
+		}
+	}
+	return client
+}
+
 func isLoopbackURL(rawURL string) bool {
 	parsedURL, err := neturl.Parse(rawURL)
 	if err != nil {
@@ -852,9 +875,7 @@ func callGeminiAPI(config *Config, requestBody []byte) (string, error) {
 	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", authToken))
 
 	// Send request
-	client := &http.Client{
-		Timeout: resolveHTTPTimeout(config),
-	}
+	client := buildHTTPClient(config)
 	resp, err := client.Do(req)
 	if err != nil {
 		return "", &apiError{fmt.Sprintf("failed to call API: %v", err)}
@@ -1046,9 +1067,7 @@ func callOpenAIAPI(config *Config, requestBody []byte) (string, error) {
 	}
 
 	// Send request
-	client := &http.Client{
-		Timeout: resolveHTTPTimeout(config),
-	}
+	client := buildHTTPClient(config)
 	resp, err := client.Do(req)
 	if err != nil {
 		return "", &apiError{fmt.Sprintf("failed to call API: %v", err)}
