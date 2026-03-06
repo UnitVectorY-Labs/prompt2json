@@ -48,6 +48,7 @@ These options work with all providers:
 | `--url`                    | url   | no       | Override default API URL                            |
 | `--api-key`                | key   | no*      | API key for bearer auth (see authentication)        |
 | `--timeout`                | int   | no       | HTTP request timeout in seconds; default is 300 for remote APIs and disabled for localhost URLs |
+| `--insecure`               |       | no       | Skip TLS certificate verification; for development or self-signed endpoints only |
 | `--out`                    | path  | no       | Output file path; defaults to STDOUT if not set     |
 | `--pretty-print`           |       | no       | Pretty-print JSON output; default is minified       |
 | `--show-url`               |       | no       | Output the API URL without making the request       |
@@ -117,6 +118,8 @@ The `--url` flag allows using custom endpoints, including:
 - Google Cloud's OpenAI-compatible endpoint
 - Ollama local instances
 - Any OpenAI-compatible API
+
+When connecting to an HTTPS endpoint with a self-signed or otherwise untrusted certificate, `--insecure` disables TLS certificate verification for the HTTP client. This is intended for local development and test environments and should not be used for production traffic.
 
 ## Authentication
 

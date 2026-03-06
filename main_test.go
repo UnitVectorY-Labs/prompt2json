@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
@@ -639,5 +640,41 @@ func TestSchemaProfileValidationInvalidSchema(t *testing.T) {
 	}
 	if report.Valid {
 		t.Fatalf("expected schema to be invalid for OpenAI profile")
+	}
+}
+
+func TestBuildHTTPClientSecure(t *testing.T) {
+	config := &Config{
+		Timeout:  0,
+		Insecure: false,
+	}
+	client := buildHTTPClient(config)
+	if client == nil {
+		t.Fatal("expected non-nil http.Client")
+	}
+	// Transport should be nil (uses Go's default transport) when Insecure is false
+	if client.Transport != nil {
+		t.Fatalf("expected nil Transport when Insecure is false, got %T", client.Transport)
+	}
+}
+
+func TestBuildHTTPClientInsecure(t *testing.T) {
+	config := &Config{
+		Timeout:  0,
+		Insecure: true,
+	}
+	client := buildHTTPClient(config)
+	if client == nil {
+		t.Fatal("expected non-nil http.Client")
+	}
+	transport, ok := client.Transport.(*http.Transport)
+	if !ok {
+		t.Fatalf("expected *http.Transport when Insecure is true, got %T", client.Transport)
+	}
+	if transport.TLSClientConfig == nil {
+		t.Fatal("expected non-nil TLSClientConfig when Insecure is true")
+	}
+	if !transport.TLSClientConfig.InsecureSkipVerify {
+		t.Fatal("expected InsecureSkipVerify=true when Insecure is true")
 	}
 }
