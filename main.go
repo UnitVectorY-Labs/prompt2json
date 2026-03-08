@@ -314,7 +314,7 @@ Example (gemini):
   echo "this is great" | prompt2json \
     --provider gemini \
     --system-instruction "Classify sentiment" \
-    --schema '{"type":"object","properties":{"sentiment":{"type":"string"}},"required":["sentiment"]}' \
+    --schema '{"type":"object","properties":{"sentiment":{"type":"string"}},"required":["sentiment"],"additionalProperties":false}' \
     --project example-project \
     --location us-central1 \
     --model gemini-2.5-flash
@@ -323,7 +323,7 @@ Example (openai):
   echo "this is great" | prompt2json \
     --provider openai \
     --system-instruction "Classify sentiment" \
-    --schema '{"type":"object","properties":{"sentiment":{"type":"string"}},"required":["sentiment"]}' \
+    --schema '{"type":"object","properties":{"sentiment":{"type":"string"}},"required":["sentiment"],"additionalProperties":false}' \
     --model gpt-4o \
     --api-key "$OPENAI_API_KEY"
 
@@ -332,7 +332,7 @@ Example (openai with Ollama):
     --provider openai \
     --url "http://localhost:11434/v1/chat/completions" \
     --system-instruction "Classify sentiment" \
-    --schema '{"type":"object","properties":{"sentiment":{"type":"string"}},"required":["sentiment"]}' \
+    --schema '{"type":"object","properties":{"sentiment":{"type":"string"}},"required":["sentiment"],"additionalProperties":false}' \
     --model llama3
 `)
 }

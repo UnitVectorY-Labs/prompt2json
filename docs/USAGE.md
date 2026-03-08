@@ -91,6 +91,9 @@ The default profile is automatically selected based on the provider:
 | `openai` | `OPENAI_202602`  |
 | `gemini` | `GEMINI_202602`  |
 
+{: .important }
+For example, `OPENAI_202602` requires object schemas to declare `additionalProperties: false` and include every defined property in `required`.
+
 Use the `--schema-profile` flag to override the default:
 
 | Option             | Arg      | Required | Notes                                                     |
