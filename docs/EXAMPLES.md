@@ -34,7 +34,7 @@ System instructions and schema can be provided as inline strings or loaded from 
 echo "this is great" | prompt2json \
     --provider gemini \
     --system-instruction "Classify sentiment as POSITIVE, NEGATIVE, or NEUTRAL" \
-    --schema '{"type":"object","properties":{"sentiment":{"type":"string","enum":["POSITIVE","NEGATIVE","NEUTRAL"]},"confidence":{"type":"integer","minimum":0,"maximum":100}},"required":["sentiment","confidence"]}' \
+    --schema '{"type":"object","properties":{"sentiment":{"type":"string","enum":["POSITIVE","NEGATIVE","NEUTRAL"]},"confidence":{"type":"integer","minimum":0,"maximum":100}},"required":["sentiment","confidence"],"additionalProperties":false}' \
     --location global \
     --model gemini-2.5-flash
 ```
@@ -53,7 +53,7 @@ The same text classification using an OpenAI-compatible Chat Completions endpoin
 echo "this is great" | prompt2json \
     --provider openai \
     --system-instruction "Classify sentiment as POSITIVE, NEGATIVE, or NEUTRAL" \
-    --schema '{"type":"object","properties":{"sentiment":{"type":"string","enum":["POSITIVE","NEGATIVE","NEUTRAL"]},"confidence":{"type":"integer","minimum":0,"maximum":100}},"required":["sentiment","confidence"]}' \
+    --schema '{"type":"object","properties":{"sentiment":{"type":"string","enum":["POSITIVE","NEGATIVE","NEUTRAL"]},"confidence":{"type":"integer","minimum":0,"maximum":100}},"required":["sentiment","confidence"],"additionalProperties":false}' \
     --model gpt-5-nano  \
     --api-key "$OPENAI_API_KEY"
 ```
@@ -79,7 +79,7 @@ echo "this is great" | prompt2json \
     --provider openai \
     --url "http://localhost:11434/v1/chat/completions" \
     --system-instruction "Classify sentiment as POSITIVE, NEGATIVE, or NEUTRAL" \
-    --schema '{"type":"object","properties":{"sentiment":{"type":"string"}},"required":["sentiment"]}' \
+    --schema '{"type":"object","properties":{"sentiment":{"type":"string"}},"required":["sentiment"],"additionalProperties":false}' \
     --model llama3.2
 ```
 
@@ -98,7 +98,7 @@ prompt2json \
   --api-key "$(gcloud auth application-default print-access-token)" \
   --model "google/gemini-2.5-flash" \
   --system-instruction "Classify sentiment as POSITIVE, NEGATIVE, or NEUTRAL" \
-  --schema '{"type":"object","properties":{"sentiment":{"type":"string","enum":["POSITIVE","NEGATIVE","NEUTRAL"]},"confidence":{"type":"integer","minimum":0,"maximum":100}},"required":["sentiment","confidence"]}' \
+  --schema '{"type":"object","properties":{"sentiment":{"type":"string","enum":["POSITIVE","NEGATIVE","NEUTRAL"]},"confidence":{"type":"integer","minimum":0,"maximum":100}},"required":["sentiment","confidence"],"additionalProperties":false}' \
   --schema-profile GEMINI_202602
 ```
 
@@ -118,7 +118,7 @@ prompt2json \
     --provider gemini \
     --prompt "Identify the character in this photo" \
     --system-instruction "Extract the character name, franchise they belong to, and your confidence level" \
-    --schema '{"type":"object","properties":{"name":{"type":"string"},"franchise":{"type":"string"},"confidence":{"type":"integer","minimum":0,"maximum":100}},"required":["name","franchise","confidence"]}' \
+    --schema '{"type":"object","properties":{"name":{"type":"string"},"franchise":{"type":"string"},"confidence":{"type":"integer","minimum":0,"maximum":100}},"required":["name","franchise","confidence"],"additionalProperties":false}' \
     --attach picture.png \
     --location us-central1 \
     --model gemini-2.5-flash \
@@ -132,7 +132,7 @@ prompt2json \
     --provider openai \
     --prompt "Identify the character in this photo" \
     --system-instruction "Extract the character name, franchise they belong to, and your confidence level" \
-    --schema '{"type":"object","properties":{"name":{"type":"string"},"franchise":{"type":"string"},"confidence":{"type":"integer","minimum":0,"maximum":100}},"required":["name","franchise","confidence"]}' \
+    --schema '{"type":"object","properties":{"name":{"type":"string"},"franchise":{"type":"string"},"confidence":{"type":"integer","minimum":0,"maximum":100}},"required":["name","franchise","confidence"],"additionalProperties":false}' \
     --attach picture.png \
     --model gpt-5-nano  \
     --api-key "$OPENAI_API_KEY" \
@@ -160,7 +160,7 @@ prompt2json \
     --provider gemini \
     --prompt "Resume attached" \
     --system-instruction "Extract basic screening information from the resume. Do not infer missing details." \
-    --schema '{"type":"object","properties":{"name":{"type":"string"},"current_role":{"type":"string"},"years_experience":{"type":"integer"},"skills":{"type":"array","items":{"type":"string"}}},"required":["name","current_role","skills"]}' \
+    --schema '{"type":"object","properties":{"name":{"type":"string"},"current_role":{"type":"string"},"years_experience":{"type":["integer","null"]},"skills":{"type":"array","items":{"type":"string"}}},"required":["name","current_role","years_experience","skills"],"additionalProperties":false}' \
     --attach resume.pdf \
     --location us-central1 \
     --model gemini-2.5-flash \
@@ -174,7 +174,7 @@ prompt2json \
     --provider openai \
     --prompt "Resume attached" \
     --system-instruction "Extract basic screening information from the resume. Do not infer missing details." \
-    --schema '{"type":"object","properties":{"name":{"type":"string"},"current_role":{"type":"string"},"years_experience":{"type":"integer"},"skills":{"type":"array","items":{"type":"string"}}},"required":["name","current_role","skills"]}' \
+    --schema '{"type":"object","properties":{"name":{"type":"string"},"current_role":{"type":"string"},"years_experience":{"type":["integer","null"]},"skills":{"type":"array","items":{"type":"string"}}},"required":["name","current_role","years_experience","skills"],"additionalProperties":false}' \
     --attach resume.pdf \
     --model gpt-5-nano  \
     --api-key "$OPENAI_API_KEY" \
@@ -237,7 +237,8 @@ Schema file can be stored as a separate JSON file that is referenced.
       "type": "string"
     }
   },
-  "required": ["department", "priority", "summary"]
+  "required": ["department", "priority", "summary"],
+  "additionalProperties": false
 }
 ```
 
@@ -277,7 +278,7 @@ prompt2json \
   --provider gemini \
   --prompt-file notes.txt \
   --system-instruction "Summarize the incident and extract key facts for reporting. Keep the summary and key facts concise including the important details. Do not invent details." \
-  --schema '{"type":"object","properties":{"summary":{"type":"string"},"key_facts":{"type":"array","items":{"type":"string"}}},"required":["summary","key_facts"]}' \
+  --schema '{"type":"object","properties":{"summary":{"type":"string"},"key_facts":{"type":"array","items":{"type":"string"}}},"required":["summary","key_facts"],"additionalProperties":false}' \
   --location us-central1 \
   --model gemini-2.5-flash \
   --pretty-print \
@@ -316,7 +317,7 @@ The actual request is not made when using the `--show-url` flag.
 echo "this is great" | prompt2json \
     --provider gemini \
     --system-instruction "Classify sentiment" \
-    --schema '{"type":"object","properties":{"sentiment":{"type":"string","enum":["POSITIVE","NEGATIVE","NEUTRAL"]},"confidence":{"type":"integer","minimum":0,"maximum":100}},"required":["sentiment","confidence"]}' \
+    --schema '{"type":"object","properties":{"sentiment":{"type":"string","enum":["POSITIVE","NEGATIVE","NEUTRAL"]},"confidence":{"type":"integer","minimum":0,"maximum":100}},"required":["sentiment","confidence"],"additionalProperties":false}' \
     --project example-project \
     --location us-central1 \
     --model gemini-2.5-flash \
@@ -335,7 +336,7 @@ https://us-central1-aiplatform.googleapis.com/v1/projects/example-project/locati
 echo "this is great" | prompt2json \
     --provider openai \
     --system-instruction "Classify sentiment" \
-    --schema '{"type":"object","properties":{"sentiment":{"type":"string"}},"required":["sentiment"]}' \
+    --schema '{"type":"object","properties":{"sentiment":{"type":"string"}},"required":["sentiment"],"additionalProperties":false}' \
     --model gpt-5-nano  \
     --show-url
 ```
@@ -360,7 +361,7 @@ The `--pretty-print` flag formats the JSON output for better readability.
 echo "this is great" | prompt2json \
     --provider gemini \
     --system-instruction "Classify sentiment" \
-    --schema '{"type":"object","properties":{"sentiment":{"type":"string","enum":["POSITIVE","NEGATIVE","NEUTRAL"]},"confidence":{"type":"integer","minimum":0,"maximum":100}},"required":["sentiment","confidence"]}' \
+    --schema '{"type":"object","properties":{"sentiment":{"type":"string","enum":["POSITIVE","NEGATIVE","NEUTRAL"]},"confidence":{"type":"integer","minimum":0,"maximum":100}},"required":["sentiment","confidence"],"additionalProperties":false}' \
     --project example-project \
     --location us-central1 \
     --model gemini-2.5-flash \
@@ -391,6 +392,7 @@ echo "this is great" | prompt2json \
   ],
   "generationConfig": {
     "responseJsonSchema": {
+      "additionalProperties": false,
       "properties": {
         "confidence": {
           "maximum": 100,
@@ -424,7 +426,7 @@ prompt2json \
     --provider openai \
     --prompt "Identify the character in this photo" \
     --system-instruction "Extract the character name, franchise they belong to, and your confidence level" \
-    --schema '{"type":"object","properties":{"name":{"type":"string"},"franchise":{"type":"string"},"confidence":{"type":"integer","minimum":0,"maximum":100}},"required":["name","franchise","confidence"]}' \
+    --schema '{"type":"object","properties":{"name":{"type":"string"},"franchise":{"type":"string"},"confidence":{"type":"integer","minimum":0,"maximum":100}},"required":["name","franchise","confidence"],"additionalProperties":false}' \
     --attach picture.png \
     --model gpt-5-nano  \
     --show-request-body \
@@ -461,6 +463,7 @@ prompt2json \
     "json_schema": {
       "name": "response",
       "schema": {
+        "additionalProperties": false,
         "properties": {
           "confidence": {
             "maximum": 100,

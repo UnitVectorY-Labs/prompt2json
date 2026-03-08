@@ -51,7 +51,7 @@ prompt2json \
     --provider gemini \
     --prompt "this is great" \
     --system-instruction "Classify sentiment" \
-    --schema '{"type":"object","properties":{"sentiment":{"type":"string","enum":["POSITIVE","NEGATIVE","NEUTRAL"]},"confidence":{"type":"integer","minimum":0,"maximum":100}},"required":["sentiment","confidence"]}' \
+    --schema '{"type":"object","properties":{"sentiment":{"type":"string","enum":["POSITIVE","NEGATIVE","NEUTRAL"]},"confidence":{"type":"integer","minimum":0,"maximum":100}},"required":["sentiment","confidence"],"additionalProperties":false}' \
     --location us-central1 \
     --project example-project \
     --model gemini-2.5-flash
@@ -64,7 +64,7 @@ prompt2json \
     --provider openai \
     --prompt "this is great" \
     --system-instruction "Classify sentiment" \
-    --schema '{"type":"object","properties":{"sentiment":{"type":"string","enum":["POSITIVE","NEGATIVE","NEUTRAL"]},"confidence":{"type":"integer","minimum":0,"maximum":100}},"required":["sentiment","confidence"]}' \
+    --schema '{"type":"object","properties":{"sentiment":{"type":"string","enum":["POSITIVE","NEGATIVE","NEUTRAL"]},"confidence":{"type":"integer","minimum":0,"maximum":100}},"required":["sentiment","confidence"],"additionalProperties":false}' \
     --model gpt-5-nano \
     --api-key "$OPENAI_API_KEY"
 ```
@@ -77,7 +77,7 @@ prompt2json \
     --url "http://localhost:11434/v1/chat/completions" \
     --prompt "this is great" \
     --system-instruction "Classify sentiment" \
-    --schema '{"type":"object","properties":{"sentiment":{"type":"string"}},"required":["sentiment"]}' \
+    --schema '{"type":"object","properties":{"sentiment":{"type":"string"}},"required":["sentiment"],"additionalProperties":false}' \
     --model llama3.2
 ```
 
