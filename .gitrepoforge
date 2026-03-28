@@ -1,0 +1,14 @@
+name: prompt2json
+default_branch: main
+config:
+  description: "Unix-style CLI that sends a system instruction, required JSON Schema, and text or inline file inputs to LLM APIs and returns schema-validated JSON for easy batch processing."
+  license: MIT
+  language: go
+  release: release-go
+  justfile: true
+  codecov: false
+  docs:
+    enabled: true
+    domain: prompt2json.unitvectorylabs.com
+  gitignore:
+    - .env

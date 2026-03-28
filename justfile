@@ -1,13 +1,12 @@
 
-# List all available commands
+# Commands for prompt2json
 default:
   @just --list
-
-# Build the Go application
+# Build prompt2json with Go
 build:
   go build ./...
 
-# Run the Go tests
+# Run tests for prompt2json with Go
 test:
   go clean -testcache
   go test ./...
