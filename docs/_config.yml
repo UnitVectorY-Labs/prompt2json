@@ -1,5 +1,5 @@
 title: prompt2json
-description: "Unix-style CLI that sends a system instruction, required JSON Schema, and text or inline file inputs to LLM APIs and returns schema-validated JSON for easy batch processing."
+description: "Unix-style CLI that sends a system instruction, required JSON Schema, and text or inline file inputs to LLM APIs and returns schema-validated JSON for easy batch processing. Supports Vertex AI (Gemini) and OpenAI-compatible Chat Completions endpoints."
 
 remote_theme: just-the-docs/just-the-docs@v0.12.0
 plugins:
