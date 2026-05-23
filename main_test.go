@@ -5,9 +5,11 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -676,5 +678,38 @@ func TestBuildHTTPClientInsecure(t *testing.T) {
 	}
 	if !transport.TLSClientConfig.InsecureSkipVerify {
 		t.Fatal("expected InsecureSkipVerify=true when Insecure is true")
+	}
+}
+
+func TestBuildVersionString(t *testing.T) {
+	originalVersion := Version
+	defer func() {
+		Version = originalVersion
+	}()
+
+	tests := []struct {
+		name    string
+		version string
+		want    string
+	}{
+		{
+			name:    "adds v prefix when missing",
+			version: "1.2.3",
+			want:    fmt.Sprintf("prompt2json version v1.2.3 (%s, %s/%s)", runtime.Version(), runtime.GOOS, runtime.GOARCH),
+		},
+		{
+			name:    "keeps existing v prefix",
+			version: "v2.0.0",
+			want:    fmt.Sprintf("prompt2json version v2.0.0 (%s, %s/%s)", runtime.Version(), runtime.GOOS, runtime.GOARCH),
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			Version = tc.version
+			if got := buildVersionString(); got != tc.want {
+				t.Fatalf("expected %q, got %q", tc.want, got)
+			}
+		})
 	}
 }

@@ -14,6 +14,7 @@ import (
 	neturl "net/url"
 	"os"
 	"path/filepath"
+	"runtime"
 	"runtime/debug"
 	"strings"
 	"time"
@@ -102,7 +103,7 @@ func run() error {
 	flag.Parse()
 
 	if showVersion {
-		fmt.Fprintf(os.Stderr, "prompt2json version %s\n", Version)
+		fmt.Fprintf(os.Stderr, "%s\n", buildVersionString())
 		return nil
 	}
 
@@ -335,6 +336,14 @@ Example (openai with Ollama):
     --schema '{"type":"object","properties":{"sentiment":{"type":"string"}},"required":["sentiment"],"additionalProperties":false}' \
     --model llama3
 `)
+}
+
+func buildVersionString() string {
+	version := Version
+	if !strings.HasPrefix(version, "v") {
+		version = "v" + version
+	}
+	return fmt.Sprintf("prompt2json version %s (%s, %s/%s)", version, runtime.Version(), runtime.GOOS, runtime.GOARCH)
 }
 
 type Config struct {
