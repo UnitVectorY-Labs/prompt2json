@@ -15,6 +15,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"regexp"
 	"runtime/debug"
 	"strings"
 	"time"
@@ -338,9 +339,11 @@ Example (openai with Ollama):
 `)
 }
 
+var semverRe = regexp.MustCompile(`^\d+\.\d+\.\d+`)
+
 func buildVersionString() string {
 	version := Version
-	if !strings.HasPrefix(version, "v") {
+	if semverRe.MatchString(version) && !strings.HasPrefix(version, "v") {
 		version = "v" + version
 	}
 	return fmt.Sprintf("prompt2json version %s (%s, %s/%s)", version, runtime.Version(), runtime.GOOS, runtime.GOARCH)
