@@ -1,7 +1,7 @@
 cloud.google.com/go/compute/metadata v0.3.0 h1:Tz+eQXMEqDIKRsmY3cHTL6FVaynIjX2QxYC4trgAKZc=
 cloud.google.com/go/compute/metadata v0.3.0/go.mod h1:zFmK7XCadkQkj6TtorcaGlCW1hT1fIilQDwofLpJ20k=
-github.com/UnitVectorY-Labs/gcpvalidate v0.1.1 h1:UG8ilP2fSsBWxTCGZVKl3zQZ+3GY1dw2A8AFiuYQ2Ak=
-github.com/UnitVectorY-Labs/gcpvalidate v0.1.1/go.mod h1:I6UAUbCnjktsC+Dn46oWfXc1WFF6XiSN9dmP1+t373E=
+github.com/UnitVectorY-Labs/gcpvalidate v0.1.2 h1:4tcBUu0z19rD7g/wf2TAZOzBPA4iCMKZxY9GZ91OKd4=
+github.com/UnitVectorY-Labs/gcpvalidate v0.1.2/go.mod h1:9byMD99vDZp2HZere2zeWbYi3VC2LG3UfcgQ1eEu8kE=
 github.com/UnitVectorY-Labs/jsonschemaprofiles v0.1.1 h1:W83TH1EAjidHkfP3bca7nH+UpYDu/kXaht2iInA/KH0=
 github.com/UnitVectorY-Labs/jsonschemaprofiles v0.1.1/go.mod h1:/6nChqEYU1b+XH1kHP5lVd8p2Zu/MEXKdKVAqG/bR5Q=
 github.com/dlclark/regexp2 v1.11.0 h1:G/nrcoOa7ZXlpoa/91N3X7mM3r8eIlMBBJZvsz/mxKI=
