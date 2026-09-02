@@ -1,6 +1,6 @@
 module github.com/UnitVectorY-Labs/prompt2json
 
-go 1.26.0 // GOVERSION
+go 1.27.0 // GOVERSION
 
 require (
 	github.com/UnitVectorY-Labs/gcpvalidate v0.1.2
