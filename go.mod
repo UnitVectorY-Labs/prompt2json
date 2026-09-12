@@ -6,7 +6,7 @@ require (
 	github.com/UnitVectorY-Labs/gcpvalidate v0.1.3
 	github.com/UnitVectorY-Labs/jsonschemaprofiles v0.1.2
 	github.com/santhosh-tekuri/jsonschema/v5 v5.3.1
-	golang.org/x/oauth2 v0.36.0
+	golang.org/x/oauth2 v0.37.0
 )
 
 require (
