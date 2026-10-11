@@ -100,6 +100,9 @@ func main() {
 
 	if err := run(); err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		if getExitCode(err) == exitCLIUsageError {
+			printHelpHint()
+		}
 		os.Exit(getExitCode(err))
 	}
 }
@@ -223,6 +226,7 @@ func run() error {
 }
 
 func defineFlags() {
+	flag.Usage = printHelpHint
 	flag.StringVar(&modeFlag, "mode", "json", "Operation: json (default) or decisions")
 	flag.StringVar(&questionsFlag, "questions", "", "Jev questions object (decisions mode, inline JSON)")
 	flag.StringVar(&questionsFileFlag, "questions-file", "", "Jev questions object from file (decisions mode)")
@@ -265,8 +269,7 @@ func (s *stringArrayValue) Set(value string) error {
 	return nil
 }
 
-func printHelp() {
-	fmt.Fprintf(os.Stderr, `prompt2json - Turn prompts into schema-validated JSON
+const helpText = `prompt2json - Turn prompts into schema-validated JSON
 
 Usage:
   prompt2json [OPTIONS]
@@ -334,13 +337,17 @@ Misc:
                              mismatched certificates. Not recommended for production.
   --verbose                  Log diagnostics to stderr
   --version                  Print version and exit
-  --help                     Print help and exit
+  --help                     Print help to stderr and exit (color on terminals)
 
 Environment (used if option not set):
   --project   GOOGLE_CLOUD_PROJECT, CLOUDSDK_CORE_PROJECT
   --location  GOOGLE_CLOUD_LOCATION, GOOGLE_CLOUD_REGION, CLOUDSDK_COMPUTE_REGION
   --api-key   OPENAI_API_KEY
               SYSTEMONE_API_KEY for the systemone provider
+
+Help styling:
+  NO_COLOR  Disable help colors when set (including an empty value).
+            Redirected help and TERM=dumb also disable colors.
 
 Providers:
   gemini   Uses Vertex AI Gemini models. Default URL is constructed from
@@ -391,8 +398,7 @@ Example (openai with Ollama):
   echo "The service is reachable." | prompt2json \
     --mode decisions --provider systemone --model jev-latest \
     --questions '{"reachable":{"type":"noul","instructions":"Is the service reachable?"}}'
-`)
-}
+`
 
 var semverRe = regexp.MustCompile(`^\d+\.\d+\.\d+`)
 
@@ -578,46 +584,6 @@ func loadConfiguration() (*Config, error) {
 		}
 	}
 
-	// Load prompt
-	if prompt != "" && promptFile != "" {
-		return nil, &cliError{"cannot specify both --prompt and --prompt-file"}
-	}
-
-	if prompt != "" {
-		config.Prompt = strings.TrimSpace(prompt)
-		config.PromptSrc = "flag"
-	} else if promptFile != "" {
-		content, err := os.ReadFile(promptFile)
-		if err != nil {
-			return nil, &inputError{fmt.Sprintf("failed to read prompt file: %v", err)}
-		}
-		config.Prompt = strings.TrimSpace(string(content))
-		config.PromptSrc = promptFile
-	} else {
-		// Read from STDIN
-		content, err := io.ReadAll(os.Stdin)
-		if err != nil {
-			return nil, &inputError{fmt.Sprintf("failed to read from STDIN: %v", err)}
-		}
-		config.Prompt = strings.TrimSpace(string(content))
-		config.PromptSrc = "stdin"
-	}
-
-	if config.Prompt == "" {
-		return nil, &inputError{"prompt cannot be empty"}
-	}
-
-	if verbose {
-		switch config.PromptSrc {
-		case "stdin":
-			fmt.Fprintf(os.Stderr, "Prompt: %d bytes (from stdin)\n", len(config.Prompt))
-		case "flag":
-			fmt.Fprintf(os.Stderr, "Prompt: %d bytes (from flag)\n", len(config.Prompt))
-		default:
-			fmt.Fprintf(os.Stderr, "Prompt: %d bytes (from %s)\n", len(config.Prompt), config.PromptSrc)
-		}
-	}
-
 	// Universal flags
 	config.URL = urlFlag
 	config.APIKey = getConfigValue(apiKeyFlag, "OPENAI_API_KEY")
@@ -693,6 +659,47 @@ func loadConfiguration() (*Config, error) {
 	}
 	config.Timeout = timeout
 	config.Insecure = insecureFlag
+
+	// Load prompt
+	if prompt != "" && promptFile != "" {
+		return nil, &cliError{"cannot specify both --prompt and --prompt-file"}
+	}
+
+	if prompt != "" {
+		config.Prompt = strings.TrimSpace(prompt)
+		config.PromptSrc = "flag"
+	} else if promptFile != "" {
+		content, err := os.ReadFile(promptFile)
+		if err != nil {
+			return nil, &inputError{fmt.Sprintf("failed to read prompt file: %v", err)}
+		}
+		config.Prompt = strings.TrimSpace(string(content))
+		config.PromptSrc = promptFile
+	} else {
+		// Read from STDIN
+		content, err := io.ReadAll(os.Stdin)
+		if err != nil {
+			return nil, &inputError{fmt.Sprintf("failed to read from STDIN: %v", err)}
+		}
+		config.Prompt = strings.TrimSpace(string(content))
+		config.PromptSrc = "stdin"
+	}
+
+	if config.Prompt == "" {
+		return nil, &inputError{"prompt cannot be empty"}
+	}
+
+	if verbose {
+		switch config.PromptSrc {
+		case "stdin":
+			fmt.Fprintf(os.Stderr, "Prompt: %d bytes (from stdin)\n", len(config.Prompt))
+		case "flag":
+			fmt.Fprintf(os.Stderr, "Prompt: %d bytes (from flag)\n", len(config.Prompt))
+		default:
+			fmt.Fprintf(os.Stderr, "Prompt: %d bytes (from %s)\n", len(config.Prompt), config.PromptSrc)
+		}
+	}
+
 	if config.Mode == "decisions" {
 		if err := prepareDecisionInput(config); err != nil {
 			return nil, err

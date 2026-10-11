@@ -30,6 +30,8 @@ Exactly one of `--questions` and `--questions-file` is required in decisions mod
 
 ## Question files
 
+Both `--questions-file` and inline `--questions` are validated against the embedded [questions JSON Schema](questions.schema.json) before any API call. The checked-in schema can also be associated with question files in your editor. Duplicate keys, trailing documents, and blank identifiers receive additional input checks. Invalid input exits with status 3 and produces no stdout.
+
 A question file contains **only the object normally placed in the Jev request's `questions` field**. It is a request fragment, not a partial JSON Schema, and does not include `model`, `state`, or an outer `questions` wrapper.
 
 Save this as `questions.json`:

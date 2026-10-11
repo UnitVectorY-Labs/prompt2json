@@ -20,6 +20,10 @@ The `prompt2json` application follows Unix-style CLI conventions and can be used
 prompt2json [OPTIONS]
 ```
 
+Missing required options produce a usage error on stderr, followed by `Run again with --help: prompt2json --help`, and exit with status 2. Unknown options and missing flag values also include this hint. Required configuration is checked before reading stdin.
+
+`prompt2json --help` writes help to stderr. Headings and option names are colored when stderr is a terminal. Set `NO_COLOR` (including an empty value), use `TERM=dumb`, or redirect stderr to get plain text. Color applies only to help; JSON output, diagnostics, and the usage hint remain uncolored.
+
 ## Modes
 
 `--mode json` is the default and preserves existing invocations. It requires a system instruction and JSON Schema. `--mode decisions` requires a Jev questions object instead, using `--questions` or `--questions-file`. Existing `--prompt`, `--prompt-file`, and stdin inputs supply the shared state. Modes are explicit; model names and URLs do not select a mode.
@@ -49,7 +53,7 @@ This table includes shared options and the task definitions required by each mod
 | `--schema`                 | json  | JSON mode* | Exactly one* of this or `--schema-file`; rejected in decisions mode |
 | `--schema-file`            | path  | JSON mode* | Exactly one* of this or `--schema`; rejected in decisions mode |
 | `--questions`              | json  | Decisions mode* | Jev questions object; mutually exclusive with `--questions-file` |
-| `--questions-file`         | path  | Decisions mode* | Jev questions object from file; mutually exclusive with `--questions` |
+| `--questions-file`         | path  | Decisions mode* | JSON Schema validated Jev questions object from file; mutually exclusive with `--questions` |
 | `--batch-questions`        | flag  | no       | Decisions simulation only: send all questions in one LLM call; default is one call per question |
 | `--state-format`           | name  | no       | Decisions state: `text` (default) or `json` |
 | `--schema-profile`         | name  | no       | Override schema profile for generative providers; rejected for `systemone` |

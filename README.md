@@ -127,6 +127,8 @@ See [Decisions mode](docs/DECISIONS.md) for question formats, CLI design, JSON s
 prompt2json [OPTIONS]
 ```
 
+Missing required options include a `prompt2json --help` hint. Help uses color on terminals; set `NO_COLOR` or redirect stderr for plain text. Color is limited to help. Decisions question files and inline questions are validated against the embedded [questions JSON Schema](docs/questions.schema.json).
+
 ### Authentication
 
 **Gemini provider:** Uses Google Application Default Credentials by default. Authenticate locally with:

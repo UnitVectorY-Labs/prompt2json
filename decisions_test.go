@@ -79,6 +79,104 @@ func TestParseDecisionQuestions(t *testing.T) {
 	}
 }
 
+func TestDecisionQuestionsJSONSchema(t *testing.T) {
+	options := func(count int) map[string]any {
+		result := map[string]any{}
+		for i := 0; i < count; i++ {
+			result[fmt.Sprint(i)] = nil
+		}
+		return result
+	}
+	levels := func(count int) []any {
+		result := make([]any, count)
+		for i := range result {
+			result[i] = "level"
+		}
+		return result
+	}
+	for _, test := range []struct {
+		name     string
+		question map[string]any
+		valid    bool
+	}{
+		{"noul", map[string]any{"type": "noul"}, true},
+		{"nullable-noul", map[string]any{"type": "noul", "instructions": nil, "criteria": nil}, true},
+		{"structured", map[string]any{"type": "noul", "instructions": map[string]any{"task": []any{"one", "two"}}, "criteria": map[string]any{"true": []any{"evidence"}}}, true},
+		{"choice-min", map[string]any{"type": "choice", "criteria": options(2)}, true},
+		{"choice-max", map[string]any{"type": "choice", "criteria": options(255)}, true},
+		{"choice-too-few", map[string]any{"type": "choice", "criteria": options(1)}, false},
+		{"choice-too-many", map[string]any{"type": "choice", "criteria": options(256)}, false},
+		{"score-min", map[string]any{"type": "score", "criteria": levels(2)}, true},
+		{"score-max", map[string]any{"type": "score", "criteria": levels(10)}, true},
+		{"score-too-few", map[string]any{"type": "score", "criteria": levels(1)}, false},
+		{"score-too-many", map[string]any{"type": "score", "criteria": levels(11)}, false},
+		{"missing-type", map[string]any{}, false},
+		{"unknown-type", map[string]any{"type": "boolean"}, false},
+		{"extra-field", map[string]any{"type": "noul", "instruction": "typo"}, false},
+		{"bad-instructions", map[string]any{"type": "noul", "instructions": true}, false},
+		{"bad-noul-criterion", map[string]any{"type": "noul", "criteria": map[string]any{"yes": "invalid"}}, false},
+		{"missing-choice-criteria", map[string]any{"type": "choice"}, false},
+		{"wrong-choice-criteria", map[string]any{"type": "choice", "criteria": []any{"a", "b"}}, false},
+		{"numeric-description", map[string]any{"type": "choice", "criteria": map[string]any{"a": 2, "b": nil}}, false},
+		{"empty-option", map[string]any{"type": "choice", "criteria": map[string]any{" ": nil, "b": nil}}, false},
+		{"null-score-level", map[string]any{"type": "score", "criteria": []any{"one", nil}}, false},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			value := map[string]any{"question": test.question}
+			if err := decisionQuestionsSchema.Validate(value); (err == nil) != test.valid {
+				t.Fatalf("schema valid=%v want=%v: %v", err == nil, test.valid, err)
+			}
+			data, _ := json.Marshal(value)
+			if _, err := parseDecisionQuestions(data); (err == nil) != test.valid {
+				t.Fatalf("parser valid=%v want=%v: %v", err == nil, test.valid, err)
+			}
+		})
+	}
+	for _, value := range []any{map[string]any{}, []any{}, nil, map[string]any{" ": map[string]any{"type": "noul"}}} {
+		if err := decisionQuestionsSchema.Validate(value); err == nil {
+			t.Fatalf("schema accepted invalid question container: %#v", value)
+		}
+	}
+}
+
+func TestDecisionCLIQuestionFileValidation(t *testing.T) {
+	for _, text := range []string{
+		testQuestions,
+		`{"q":{"type":"choice","criteria":{"only":"one"}}}`,
+		`{"q":{"type":"noul","extra":true}}`,
+		`{"q":{"type":"score","criteria":["one",null]}}`,
+		`{"q":{"type":"noul"},"q":{"type":"noul"}}`,
+		`{"q":{"type":"noul"}} {}`,
+	} {
+		for _, source := range []string{"file", "inline"} {
+			t.Run(source+text, func(t *testing.T) {
+				server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					t.Error("question validation or dry-run must not make an API call")
+				}))
+				defer server.Close()
+				args := []string{"--mode", "decisions", "--provider", "systemone", "--url", server.URL, "--model", "example-model", "--prompt", "state", "--show-request-body"}
+				if source == "file" {
+					file := filepath.Join(t.TempDir(), "questions.json")
+					if err := os.WriteFile(file, []byte(text), 0600); err != nil {
+						t.Fatal(err)
+					}
+					args = append(args, "--questions-file", file)
+				} else {
+					args = append(args, "--questions", text)
+				}
+				out, stderr, code := runDecisionCLI(t, "", args...)
+				if text == testQuestions {
+					if code != 0 || !strings.Contains(out, `"questions"`) {
+						t.Fatalf("valid questions rejected: exit=%d stderr=%s", code, stderr)
+					}
+				} else if code != 3 || out != "" || !strings.Contains(stderr, "invalid questions") {
+					t.Fatalf("invalid questions accepted: exit=%d stdout=%q stderr=%s", code, out, stderr)
+				}
+			})
+		}
+	}
+}
+
 func TestNormalizeDecisionAnswer(t *testing.T) {
 	questions := mustQuestions(t, testQuestions)
 	choice, err := normalizeDecisionAnswer(questions["route"], map[string]any{"probabilities": map[string]any{"a": 0.1, "b": 0.3, "c": 0.6}}, false)

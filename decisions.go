@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	_ "embed"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -21,6 +22,11 @@ const defaultSystemOneURL = "https://api.typesafe.ai/v1/systemone"
 
 // Permit rounding noise, but never silently repair an invalid distribution.
 const probabilitySumTolerance = 1e-4
+
+//go:embed docs/questions.schema.json
+var decisionQuestionsSchemaJSON string
+
+var decisionQuestionsSchema = jsonschema.MustCompileString("questions.schema.json", decisionQuestionsSchemaJSON)
 
 // DecisionQuestion uses Jev's question vocabulary. Structured descriptions are
 // retained as JSON rather than flattened, including null choice descriptions.
@@ -77,6 +83,9 @@ func parseDecisionQuestions(data []byte) (map[string]DecisionQuestion, error) {
 	entries, ok := value.(map[string]any)
 	if !ok || len(entries) == 0 {
 		return nil, fmt.Errorf("expected a nonempty object keyed by question ID, not a schema or full API request")
+	}
+	if err := decisionQuestionsSchema.Validate(value); err != nil {
+		return nil, fmt.Errorf("questions JSON Schema validation failed: %w", err)
 	}
 	questions := make(map[string]DecisionQuestion, len(entries))
 	for _, id := range sortedKeys(entries) {
