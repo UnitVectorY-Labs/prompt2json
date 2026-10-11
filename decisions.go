@@ -481,8 +481,8 @@ func probability(value any) (float64, bool) {
 type decisionDecimal float64
 
 func (n decisionDecimal) MarshalJSON() ([]byte, error) {
-	s := strconv.FormatFloat(float64(n), 'g', -1, 64)
-	if !strings.ContainsAny(s, ".eE") {
+	s := strconv.FormatFloat(float64(n), 'f', -1, 64)
+	if !strings.Contains(s, ".") {
 		s += ".0"
 	}
 	return []byte(s), nil

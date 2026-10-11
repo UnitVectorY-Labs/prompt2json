@@ -20,6 +20,33 @@ const testQuestions = `{
   "severity": {"type":"score","instructions":"How severe?","criteria":["Cosmetic","Workaround","Blocked"]}
 }`
 
+func TestDecisionDecimalMarshalJSON(t *testing.T) {
+	for _, test := range []struct {
+		value float64
+		want  string
+	}{
+		{0, "0.0"},
+		{1, "1.0"},
+		{2, "2.0"},
+		{0.5, "0.5"},
+		{0.00005, "0.00005"},
+		{1e-9, "0.000000001"},
+		{math.Nextafter(1, 0), "0.9999999999999999"},
+		{math.SmallestNonzeroFloat64, "0." + strings.Repeat("0", 323) + "5"},
+	} {
+		t.Run(fmt.Sprint(test.value), func(t *testing.T) {
+			data, err := json.Marshal(decisionDecimal(test.value))
+			if err != nil || string(data) != test.want {
+				t.Fatalf("marshal=%s want=%s err=%v", data, test.want, err)
+			}
+			var decoded float64
+			if err := json.Unmarshal(data, &decoded); err != nil || decoded != test.value {
+				t.Fatalf("decimal changed value: got=%g want=%g err=%v", decoded, test.value, err)
+			}
+		})
+	}
+}
+
 func mustQuestions(t *testing.T, text string) map[string]DecisionQuestion {
 	t.Helper()
 	questions, err := parseDecisionQuestions([]byte(text))

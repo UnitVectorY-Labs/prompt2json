@@ -151,7 +151,7 @@ For complete usage documentation including all options, environment variables, a
 
 ## Attachment Support
 
-The files types of `png`, `jpg`, `jpeg`, `webp`, and `pdf` are supported as inline attachments for the Gemini and OpenAI providers, in either mode. The files are included as inline base64-encoded data in the request payload. The file extension is used to determine the content type, which is sent in the request metadata. Support for attachments varies based on provider and individual LLM that is being used. The native System One provider does not support attachments.
+The file types of `png`, `jpg`, `jpeg`, `webp`, and `pdf` are supported as inline attachments for the Gemini and OpenAI providers, in either mode. The files are included as inline base64-encoded data in the request payload. The file extension is used to determine the content type, which is sent in the request metadata. Support for attachments varies based on provider and individual LLM that is being used. The native System One provider does not support attachments.
 
 ## Limitations
 
