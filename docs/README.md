@@ -18,6 +18,7 @@ Unix-style CLI that brings English-as-Code to your command line. Define behavior
 - Treat LLM calls as deterministic interfaces, not interactive sessions
 - Supports plain text inputs and inline attachments (`.png`, `.jpg`, `.jpeg`, `.webp`, `.pdf`)
 - Works with Vertex AI Gemini models and OpenAI-compatible Chat Completions endpoints
+- Optional decisions mode evaluates Jev questions through native System One APIs or constrained LLM simulation
 
 ![prompt2json diagram](diagram.svg)
 
@@ -29,9 +30,16 @@ The `--provider` flag is required and determines which API format to use:
 |----------|-------------|-------------|
 | `gemini` | Vertex AI Gemini models | Constructed from `--project` and `--location` |
 | `openai` | OpenAI-compatible Chat Completions API | `https://api.openai.com/v1/chat/completions` |
+| `systemone` | Native Jev-compatible decisions (`--mode decisions`) | `https://api.typesafe.ai/v1/systemone` |
 
 The `openai` provider works with OpenAI, Google Cloud's OpenAI-compatible endpoint, Ollama, and other compatible services.
 Some OpenAI-compatible endpoints may reject multimodal attachment payloads even when text-only requests work.
+
+## Decisions mode
+
+Existing commands retain their schema-based behavior. Add `--mode decisions` to supply a Jev questions object through `--questions` or `--questions-file` instead of a schema and system instruction. The existing prompt options and stdin supply shared state. Both native and simulated execution produce Jev-compatible `model`, `answers`, and `usage` fields.
+
+See [Decisions mode](decisions) for configuration, reusable questions, and examples using the official Jev API and traditional LLM simulation. Simulation uses generated probability estimates; a constrained format does not guarantee calibrated decisions.
 
 ## Why prompt2json?
 
