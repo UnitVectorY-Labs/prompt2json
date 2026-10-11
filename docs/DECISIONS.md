@@ -18,6 +18,7 @@ Existing commands continue to use JSON mode. `--mode json` is the default and ca
 | Operation | Default, or `--mode json` | `--mode decisions` |
 | Task definition | `--system-instruction` / `--system-instruction-file` | Instructions inside each question |
 | Output definition | `--schema` / `--schema-file` | `--questions` / `--questions-file` |
+| Question execution | Always one native request | One LLM call per question by default; `--batch-questions` combines them |
 | Evidence | `--prompt`, `--prompt-file`, or stdin | The same options supply the shared state |
 | Input interpretation | Prompt text | `--state-format text` (default), or `json` |
 | Transport | `--provider openai` or `gemini` | `openai`, `gemini`, or `systemone` |
@@ -121,13 +122,17 @@ printf '%s\n' 'The service is reachable. The disk usage is at 97 percent and gro
     --pretty-print
 ```
 
+By default, simulation sends each question in a separate, sequential API call with the same state and attachments. Each call receives only that question's instructions and a generated schema for its answer. The application validates every answer, restores question IDs, derives the remaining fields, and assembles one final response. Input and output token counts are summed across calls, including repeated state and instructions. All calls must report the same resolved model. A failure stops execution without emitting partial answers or replacing an existing output file.
+
+Add `--batch-questions` to send all questions in one LLM call. This reduces repeated input and request overhead, but all questions share a model context. The flag applies only to decisions simulation with `openai` or `gemini`; `systemone` always sends the complete questions object in one native request and rejects this flag.
+
 For Vertex AI, select `--provider gemini` and supply the usual `--project`, `--location`, and `--model` options. Authentication and endpoint overrides behave as in JSON mode. Attachments are supported through the existing generative-provider formats, subject to the selected model's capabilities.
 
 The compiler builds a closed JSON Schema from your questions and validates it against the provider's schema profile. OpenAI simulation always sends `strict: true`; the existing `--strict-schema` flag remains optional in JSON mode. Gemini uses its JSON response MIME type and schema. `--schema-profile` can override profile validation for either simulation provider.
 
 The question definitions are placed in the system instruction. State is encoded separately as a JSON object in the user message. Original question IDs are replaced with opaque `q0`, `q1`, etc. aliases, then restored in the final response. The model outputs only a `noul` probability or a distribution for each question. It does not generate metadata or derived fields.
 
-This is a translation into text generation, not native decision inference. Probabilities are generated estimates, and a valid schema does not establish calibration or correctness. Questions share one generated response, so independent evaluation is requested in the prompt but is not guaranteed. Instructions embedded in state are treated as evidence by the generated system instruction; schema constraints alone cannot establish resistance to prompt injection. Define missing-evidence behavior in your questions and include an `unknown` or `other` choice when appropriate. Evaluate your own labeled examples before choosing thresholds.
+This is a translation into text generation, not native decision inference. Probabilities are generated estimates, and a valid schema does not establish calibration or correctness. With `--batch-questions`, questions share one generated response, so independent evaluation is requested in the prompt but is not guaranteed. Separate calls isolate question contexts but do not guarantee statistical independence or calibrated probabilities. Instructions embedded in state are treated as evidence by the generated system instruction; schema constraints alone cannot establish resistance to prompt injection. Define missing-evidence behavior in your questions and include an `unknown` or `other` choice when appropriate. Evaluate your own labeled examples before choosing thresholds.
 
 `--provider openai` continues to mean Chat Completions, including in decisions mode. It does **not** call OpenAI's separate `/v1/decisions` endpoint; a native adapter for that protocol is outside this change.
 
@@ -148,7 +153,7 @@ The same interpretation applies to `--prompt` and `--prompt-file`. JSON numbers,
 
 ## Output and validation
 
-Both execution paths emit the same envelope. This example illustrates the format rather than a guaranteed model result:
+Both execution paths emit the same envelope. Probabilities, `noul`, `score`, and `confidence` use decimal notation in the final JSON, including values such as `0.0`, `1.0`, and `2.0`. Integer-valued JSON numbers from a model are accepted as numbers; the application computes derived fields and formats them deterministically. JSON itself has a single number type, so changing `1` to `1.0` does not change its value. Token counts remain integers and configured legends are preserved. This example illustrates the format rather than a guaranteed model result:
 
 ```json
 {
@@ -206,3 +211,5 @@ prompt2json --mode decisions --provider openai --model example-model \
   --questions-file questions.json --prompt 'Example evidence' \
   --show-request-body --pretty-print
 ```
+
+In the default separate-call mode with multiple questions, `--show-request-body` returns a JSON array of `{ "question_id": "...", "request": { ... } }` entries, one per planned call. With `--batch-questions` or a single question, it returns the single API request body. No dry-run request is sent.

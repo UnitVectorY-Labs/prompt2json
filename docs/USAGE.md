@@ -50,6 +50,7 @@ This table includes shared options and the task definitions required by each mod
 | `--schema-file`            | path  | JSON mode* | Exactly one* of this or `--schema`; rejected in decisions mode |
 | `--questions`              | json  | Decisions mode* | Jev questions object; mutually exclusive with `--questions-file` |
 | `--questions-file`         | path  | Decisions mode* | Jev questions object from file; mutually exclusive with `--questions` |
+| `--batch-questions`        | flag  | no       | Decisions simulation only: send all questions in one LLM call; default is one call per question |
 | `--state-format`           | name  | no       | Decisions state: `text` (default) or `json` |
 | `--schema-profile`         | name  | no       | Override schema profile for generative providers; rejected for `systemone` |
 | `--prompt`                 | text  | no       | Mutually exclusive with `--prompt-file`             |
@@ -212,7 +213,7 @@ When using either dry-run option:
 - Output goes to STDOUT or the file specified by `--out`
 - The `--pretty-print` flag can be used with `--show-request-body` to format the JSON
 
-Both dry-run modes work with all providers and modes. For simulation, `--show-request-body` exposes the generated question instructions and output schema; for native decisions, it shows the System One request.
+Both dry-run modes work with all providers and modes. For simulation, `--show-request-body` exposes the generated question instructions and output schema. With multiple separate questions (the default), it emits an array of `question_id`/`request` entries; `--batch-questions` emits one combined request. For native decisions, it shows the System One request.
 
 ## JSON mode validation rules
 

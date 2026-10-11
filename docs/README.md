@@ -39,7 +39,7 @@ Some OpenAI-compatible endpoints may reject multimodal attachment payloads even 
 
 Existing commands retain their schema-based behavior. Add `--mode decisions` to supply a Jev questions object through `--questions` or `--questions-file` instead of a schema and system instruction. The existing prompt options and stdin supply shared state. Both native and simulated execution produce Jev-compatible `model`, `answers`, and `usage` fields.
 
-See [Decisions mode](decisions) for configuration, reusable questions, and examples using the official Jev API and traditional LLM simulation. Simulation uses generated probability estimates; a constrained format does not guarantee calibrated decisions.
+See [Decisions mode](decisions) for configuration, reusable questions, and examples using the official Jev API and traditional LLM simulation. LLM simulation makes one call per question by default; add `--batch-questions` for one combined call. Native System One requests always include all questions. Simulation uses generated probability estimates; a constrained format does not guarantee calibrated decisions.
 
 ## Why prompt2json?
 

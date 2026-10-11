@@ -61,6 +61,7 @@ var (
 	questionsFlag         string
 	questionsFileFlag     string
 	stateFormatFlag       string
+	batchQuestionsFlag    bool
 	providerFlag          string
 	systemInstruction     string
 	systemInstructionFile string
@@ -130,6 +131,11 @@ func run() error {
 	attachmentData, err := loadAttachments(config)
 	if err != nil {
 		return err
+	}
+
+	// Simulated questions run separately unless batching is explicitly requested.
+	if config.Mode == "decisions" && config.Provider != "systemone" && !config.BatchQuestions && len(config.Questions) > 1 && !showURL {
+		return runIndependentDecisionQuestions(config, attachmentData)
 	}
 
 	// Build API request (provider-specific)
@@ -220,6 +226,7 @@ func defineFlags() {
 	flag.StringVar(&modeFlag, "mode", "json", "Operation: json (default) or decisions")
 	flag.StringVar(&questionsFlag, "questions", "", "Jev questions object (decisions mode, inline JSON)")
 	flag.StringVar(&questionsFileFlag, "questions-file", "", "Jev questions object from file (decisions mode)")
+	flag.BoolVar(&batchQuestionsFlag, "batch-questions", false, "Send all decision questions in one LLM call (simulation only)")
 	flag.StringVar(&stateFormatFlag, "state-format", "text", "Decision state input: text (default) or json")
 	flag.StringVar(&providerFlag, "provider", "", "API provider: gemini, openai, or systemone (decisions only)")
 	flag.StringVar(&systemInstruction, "system-instruction", "", "System instruction (inline text)")
@@ -278,6 +285,8 @@ Required in JSON mode (existing behavior):
 Required in decisions mode (replaces schema/system instruction):
   --questions JSON          | --questions-file PATH
                              A Jev questions object keyed by question ID
+  --batch-questions          Send all questions in one LLM call (simulation only;
+                             default: one call per question)
   --state-format text|json   Interpret prompt/stdin as state (default: text)
                              json accepts a JSON string, object, or array
                              openai/gemini simulate; systemone calls natively
@@ -398,6 +407,7 @@ func buildVersionString() string {
 type Config struct {
 	Mode                 string
 	Questions            map[string]DecisionQuestion
+	BatchQuestions       bool
 	State                any
 	ResponseModel        string
 	ResponseUsage        map[string]any
@@ -433,10 +443,11 @@ type Attachment struct {
 
 func loadConfiguration() (*Config, error) {
 	config := &Config{
-		Mode:        strings.ToLower(modeFlag),
-		Verbose:     verbose,
-		OutFile:     outFile,
-		PrettyPrint: prettyPrint,
+		Mode:           strings.ToLower(modeFlag),
+		BatchQuestions: batchQuestionsFlag,
+		Verbose:        verbose,
+		OutFile:        outFile,
+		PrettyPrint:    prettyPrint,
 	}
 	if config.Mode == "" { // Direct callers predating --mode retain JSON behavior.
 		config.Mode = "json"
@@ -457,6 +468,9 @@ func loadConfiguration() (*Config, error) {
 		return nil, &cliError{"--provider systemone requires --mode decisions"}
 	}
 	config.Provider = provider
+	if provider == "systemone" && batchQuestionsFlag {
+		return nil, &cliError{"--batch-questions is only supported for decisions simulation; systemone always sends all questions together"}
+	}
 
 	if config.Mode == "json" {
 		// Load system instruction

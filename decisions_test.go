@@ -269,7 +269,7 @@ func TestDecisionCLISimulation(t *testing.T) {
 				}
 			}))
 			defer server.Close()
-			out, errText, code := runDecisionCLI(t, "The service is reachable.", "--mode", "decisions", "--provider", provider, "--model", "requested-alias", "--url", server.URL, "--questions", testQuestions, "--api-key", "test-key")
+			out, errText, code := runDecisionCLI(t, "The service is reachable.", "--mode", "decisions", "--provider", provider, "--model", "requested-alias", "--url", server.URL, "--questions", testQuestions, "--batch-questions", "--api-key", "test-key")
 			if code != 0 {
 				t.Fatalf("exit %d: %s", code, errText)
 			}
@@ -306,6 +306,7 @@ func TestDecisionCLIFlagErrors(t *testing.T) {
 		{[]string{"--system-instruction", "override"}, 2, "instead of --schema"},
 		{[]string{"--questions-file", "file.json"}, 2, "exactly one"},
 		{[]string{"--strict-schema"}, 2, "not supported"},
+		{[]string{"--batch-questions"}, 2, "only supported"},
 		{[]string{"--schema-profile", "MINIMAL_202602"}, 2, "not supported"},
 		{[]string{"--attach", "missing.pdf"}, 2, "not supported"},
 		{[]string{"--project", "project"}, 2, "not valid"},
@@ -338,6 +339,124 @@ func TestDecisionCLIFlagErrors(t *testing.T) {
 		if code == 0 || out != "" {
 			t.Fatalf("accepted invalid flags: %v", args)
 		}
+	}
+}
+
+func TestDecisionCLIIndependentQuestions(t *testing.T) {
+	for _, provider := range []string{"openai", "gemini"} {
+		t.Run(provider, func(t *testing.T) {
+			calls := 0
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				calls++
+				var request map[string]any
+				json.NewDecoder(r.Body).Decode(&request)
+				var schema map[string]any
+				var instruction, evidence string
+				if provider == "openai" {
+					schema = request["response_format"].(map[string]any)["json_schema"].(map[string]any)["schema"].(map[string]any)
+					messages := request["messages"].([]any)
+					instruction = messages[0].(map[string]any)["content"].(string)
+					evidence = messages[1].(map[string]any)["content"].(string)
+				} else {
+					schema = request["generationConfig"].(map[string]any)["responseJsonSchema"].(map[string]any)
+					instruction = request["systemInstruction"].(map[string]any)["parts"].([]any)[0].(map[string]any)["text"].(string)
+					evidence = request["contents"].([]any)[0].(map[string]any)["parts"].([]any)[0].(map[string]any)["text"].(string)
+				}
+				answerSchemas := schema["properties"].(map[string]any)["answers"].(map[string]any)["properties"].(map[string]any)
+				if len(answerSchemas) != 1 || answerSchemas["q0"] == nil || strings.Contains(instruction, `"q1"`) || evidence != `{"state":{"message":"Reachable"}}` {
+					t.Errorf("request must contain only its question and shared state: %s", instruction)
+				}
+				var content string
+				switch calls {
+				case 1:
+					content = `{"answers":{"q0":{"noul":1}}}`
+				case 2:
+					content = `{"answers":{"q0":{"probabilities":{"a":0,"b":0,"c":1}}}}`
+				case 3:
+					content = `{"answers":{"q0":{"probabilities":{"0":0,"1":0,"2":1}}}}`
+				default:
+					t.Error("unexpected extra call")
+				}
+				if provider == "openai" {
+					json.NewEncoder(w).Encode(map[string]any{"model": "resolved-model", "choices": []any{map[string]any{"message": map[string]any{"content": content}, "finish_reason": "stop"}}, "usage": map[string]any{"prompt_tokens": 10, "completion_tokens": 5}})
+				} else {
+					json.NewEncoder(w).Encode(map[string]any{"modelVersion": "resolved-model", "candidates": []any{map[string]any{"content": map[string]any{"parts": []any{map[string]any{"text": content}}}, "finishReason": "STOP"}}, "usageMetadata": map[string]any{"promptTokenCount": 10, "candidatesTokenCount": 4, "thoughtsTokenCount": 1}})
+				}
+			}))
+			defer server.Close()
+			out, errText, code := runDecisionCLI(t, `{"message":"Reachable"}`, "--mode", "decisions", "--provider", provider, "--model", "requested-model", "--url", server.URL, "--questions", testQuestions, "--state-format", "json")
+			if code != 0 || calls != 3 {
+				t.Fatalf("calls=%d exit=%d stderr=%s", calls, code, errText)
+			}
+			var response map[string]any
+			json.Unmarshal([]byte(out), &response)
+			answers := response["answers"].(map[string]any)
+			usage := response["usage"].(map[string]any)
+			if len(answers) != 3 || answers["route"].(map[string]any)["choice"] != "c" || answers["severity"].(map[string]any)["score"] != float64(2) || usage["input_tokens"] != float64(30) || usage["output_tokens"] != float64(15) {
+				t.Fatalf("wrong merged response: %s", out)
+			}
+			for _, want := range []string{`"noul":1.0`, `"score":2.0`, `"confidence":1.0`, `"a":0.0`, `"c":1.0`, `"input_tokens":30`} {
+				if !strings.Contains(out, want) {
+					t.Errorf("missing %s in %s", want, out)
+				}
+			}
+		})
+	}
+}
+
+func TestDecisionCLIIndependentDryRun(t *testing.T) {
+	out, errText, code := runDecisionCLI(t, "evidence", "--mode", "decisions", "--provider", "openai", "--model", "example-model", "--questions", testQuestions, "--show-request-body")
+	if code != 0 {
+		t.Fatalf("exit=%d stderr=%s", code, errText)
+	}
+	var requests []struct {
+		QuestionID string         `json:"question_id"`
+		Request    map[string]any `json:"request"`
+	}
+	if err := json.Unmarshal([]byte(out), &requests); err != nil || len(requests) != 3 {
+		t.Fatalf("wrong dry-run requests: %s (%v)", out, err)
+	}
+	for i, id := range []string{"flag", "route", "severity"} {
+		if requests[i].QuestionID != id || requests[i].Request["messages"] == nil {
+			t.Fatalf("missing request for %s", id)
+		}
+	}
+}
+
+func TestDecisionCLIIndependentFailureIsAtomic(t *testing.T) {
+	for _, failure := range []string{"validation", "api", "model"} {
+		t.Run(failure, func(t *testing.T) {
+			calls := 0
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				calls++
+				if calls == 2 && failure == "api" {
+					http.Error(w, "unavailable", 503)
+					return
+				}
+				content := `{"answers":{"q0":{"noul":1}}}`
+				if calls == 2 {
+					content = `{"answers":{"q0":{"probabilities":{"a":0,"b":0,"c":0}}}}`
+				}
+				model := "resolved-model"
+				if calls == 2 && failure == "model" {
+					model = "different-model"
+					content = `{"answers":{"q0":{"probabilities":{"a":0,"b":0,"c":1}}}}`
+				}
+				json.NewEncoder(w).Encode(map[string]any{"model": model, "choices": []any{map[string]any{"message": map[string]any{"content": content}, "finish_reason": "stop"}}, "usage": map[string]any{"prompt_tokens": 10, "completion_tokens": 5}})
+			}))
+			defer server.Close()
+			file := filepath.Join(t.TempDir(), "output.json")
+			os.WriteFile(file, []byte("existing"), 0600)
+			out, errText, code := runDecisionCLI(t, "evidence", "--mode", "decisions", "--provider", "openai", "--model", "example-model", "--url", server.URL, "--questions", testQuestions, "--out", file)
+			wantCode := 4
+			if failure == "api" {
+				wantCode = 5
+			}
+			data, _ := os.ReadFile(file)
+			if code != wantCode || out != "" || calls != 2 || string(data) != "existing" {
+				t.Fatalf("exit=%d calls=%d stdout=%q file=%q stderr=%s", code, calls, out, data, errText)
+			}
+		})
 	}
 }
 

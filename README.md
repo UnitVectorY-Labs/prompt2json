@@ -117,7 +117,7 @@ printf '%s\n' 'The service is reachable. The disk usage is at 97 percent and gro
     --pretty-print
 ```
 
-Both produce `{"model": "...", "answers": {...}, "usage": {...}}`. The application derives choices, scores, confidence, and score legends from validated probabilities. Simulation probabilities are generated estimates; matching the format does not establish calibration or native inference performance.
+Both produce `{"model": "...", "answers": {...}, "usage": {...}}`. The application derives choices, scores, confidence, and score legends from validated probabilities. LLM simulation makes one call per question by default; add `--batch-questions` for one combined call. Native System One requests always include all questions. Simulation probabilities are generated estimates; matching the format does not establish calibration or native inference performance.
 
 See [Decisions mode](docs/DECISIONS.md) for question formats, CLI design, JSON state input, normalization, and limitations. `--provider openai` uses Chat Completions; a native OpenAI Decisions API adapter is not included.
 
