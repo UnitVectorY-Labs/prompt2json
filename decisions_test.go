@@ -177,11 +177,14 @@ func runDecisionCLI(t *testing.T, stdin string, args ...string) (string, string,
 	t.Helper()
 	cmd := exec.Command(os.Args[0], append([]string{"-test.run=^TestDecisionCLIProcess$", "--"}, args...)...)
 	for _, variable := range os.Environ() {
-		if !strings.HasPrefix(variable, "OPENAI_API_KEY=") && !strings.HasPrefix(variable, "SYSTEMONE_API_KEY=") && !strings.HasPrefix(variable, "PROMPT2JSON_TEST_CLI=") {
+		if !strings.HasPrefix(variable, "OPENAI_API_KEY=") && !strings.HasPrefix(variable, "SYSTEMONE_API_KEY=") && !strings.HasPrefix(variable, "GOOGLE_APPLICATION_CREDENTIALS=") && !strings.HasPrefix(variable, "PROMPT2JSON_TEST_CLI=") {
 			cmd.Env = append(cmd.Env, variable)
 		}
 	}
 	cmd.Env = append(cmd.Env, "PROMPT2JSON_TEST_CLI=1")
+	// Prevent these mock-server tests from discovering developer ADC credentials
+	// or falling back to cloud metadata. Any Gemini API call must use a fake key.
+	cmd.Env = append(cmd.Env, "GOOGLE_APPLICATION_CREDENTIALS="+filepath.Join(t.TempDir(), "missing-adc.json"))
 	cmd.Stdin = strings.NewReader(stdin)
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &stdout, &stderr
@@ -348,6 +351,9 @@ func TestDecisionCLIIndependentQuestions(t *testing.T) {
 			calls := 0
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				calls++
+				if r.Header.Get("Authorization") != "Bearer test-key" {
+					t.Error("mock requests must use the explicit fake API key")
+				}
 				var request map[string]any
 				json.NewDecoder(r.Body).Decode(&request)
 				var schema map[string]any
@@ -384,7 +390,7 @@ func TestDecisionCLIIndependentQuestions(t *testing.T) {
 				}
 			}))
 			defer server.Close()
-			out, errText, code := runDecisionCLI(t, `{"message":"Reachable"}`, "--mode", "decisions", "--provider", provider, "--model", "requested-model", "--url", server.URL, "--questions", testQuestions, "--state-format", "json")
+			out, errText, code := runDecisionCLI(t, `{"message":"Reachable"}`, "--mode", "decisions", "--provider", provider, "--model", "requested-model", "--url", server.URL, "--questions", testQuestions, "--state-format", "json", "--api-key", "test-key")
 			if code != 0 || calls != 3 {
 				t.Fatalf("calls=%d exit=%d stderr=%s", calls, code, errText)
 			}
