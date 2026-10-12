@@ -4,6 +4,8 @@
 
 Unix-style CLI that sends a system instruction, required JSON Schema, and text or inline file inputs to LLM APIs and returns schema-validated JSON for easy batch processing. Supports Vertex AI (Gemini) and OpenAI-compatible Chat Completions endpoints.
 
+An optional `--mode decisions` accepts Jev-style questions instead of a schema and system instruction. It returns Jev-compatible answers using a native System One API or structured-output simulation through either existing provider. Existing invocations keep their original behavior.
+
 ## Overview
 
 `prompt2json` is designed for composable command line workflows:
@@ -24,6 +26,7 @@ The `--provider` flag is required and determines which API format to use:
 |----------|-------------|-------------|
 | `gemini` | Vertex AI Gemini models | Constructed from `--project` and `--location` |
 | `openai` | OpenAI-compatible Chat Completions API | `https://api.openai.com/v1/chat/completions` |
+| `systemone` | Native Jev-compatible decisions (`--mode decisions` required) | `https://api.typesafe.ai/v1/systemone` |
 
 The `openai` provider works with OpenAI, Google Cloud's OpenAI-compatible endpoint, Ollama, and other compatible services.
 
@@ -86,11 +89,45 @@ The output will be minified JSON matching the specified schema:
 {"sentiment":"POSITIVE","confidence":95}
 ```
 
+### Decisions mode
+
+Questions use the Jev `questions` object, supplied inline or from a file. The existing prompt options and stdin supply the shared state. No output schema is needed. Set `SYSTEMONE_API_KEY` to your TypeSafe API key before calling the official Jev endpoint.
+
+```bash
+printf '%s\n' 'The service is reachable. The disk usage is at 97 percent and growing.' |
+  prompt2json --mode decisions \
+    --provider systemone \
+    --url https://api.typesafe.ai/v1/systemone \
+    --api-key "$SYSTEMONE_API_KEY" \
+    --model jev-latest \
+    --questions-file examples/decisions/questions.json \
+    --pretty-print
+```
+
+To simulate the same questions through an ordinary LLM, change the transport and model. Set `OPENAI_API_KEY` to your OpenAI API key and `OPENAI_MODEL` to a model supporting strict structured outputs:
+
+```bash
+printf '%s\n' 'The service is reachable. The disk usage is at 97 percent and growing.' |
+  prompt2json --mode decisions \
+    --provider openai \
+    --url https://api.openai.com/v1/chat/completions \
+    --api-key "$OPENAI_API_KEY" \
+    --model "$OPENAI_MODEL" \
+    --questions-file examples/decisions/questions.json \
+    --pretty-print
+```
+
+Both produce `{"model": "...", "answers": {...}, "usage": {...}}`. The application derives choices, scores, confidence, and score legends from validated probabilities. LLM simulation makes one call per question by default; add `--batch-questions` for one combined call. Native System One requests always include all questions. Simulation probabilities are generated estimates; matching the format does not establish calibration or native inference performance.
+
+See [Decisions mode](docs/DECISIONS.md) for question formats, CLI design, JSON state input, normalization, and limitations. `--provider openai` uses Chat Completions; a native OpenAI Decisions API adapter is not included.
+
 ## Usage
 
 ```
 prompt2json [OPTIONS]
 ```
+
+Missing required options include a `prompt2json --help` hint. Help uses color on terminals; set `NO_COLOR` or redirect stderr for plain text. Color is limited to help. Decisions question files and inline questions are validated against the embedded [questions JSON Schema](docs/questions.schema.json).
 
 ### Authentication
 
@@ -108,11 +145,13 @@ export GOOGLE_APPLICATION_CREDENTIALS=/path/to/key.json
 
 **OpenAI provider:** Requires an API key via `--api-key` flag or `OPENAI_API_KEY` environment variable when using the default OpenAI URL. When `--url` is provided (for local servers like Ollama), the API key is optional.
 
+**System One provider:** Uses `--api-key` or `SYSTEMONE_API_KEY`. A key is required for the default endpoint and optional with `--url`.
+
 For complete usage documentation including all options, environment variables, and command line conventions, see the [Usage documentation](https://unitvectory-labs.github.io/prompt2json/usage).
 
 ## Attachment Support
 
-The files types of `png`, `jpg`, `jpeg`, `webp`, and `pdf` are supported as inline attachments for both providers. The files are included as inline base64-encoded data in the request payload. The file extension is used to determine the content type, which is sent in the request metadata. Support for attachments varies based on provider and individual LLM that is being used.
+The file types of `png`, `jpg`, `jpeg`, `webp`, and `pdf` are supported as inline attachments for the Gemini and OpenAI providers, in either mode. The files are included as inline base64-encoded data in the request payload. The file extension is used to determine the content type, which is sent in the request metadata. Support for attachments varies based on provider and individual LLM that is being used. The native System One provider does not support attachments.
 
 ## Limitations
 

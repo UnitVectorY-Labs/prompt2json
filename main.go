@@ -14,8 +14,8 @@ import (
 	neturl "net/url"
 	"os"
 	"path/filepath"
-	"runtime"
 	"regexp"
+	"runtime"
 	"runtime/debug"
 	"strings"
 	"time"
@@ -57,6 +57,11 @@ const (
 
 // CLI flags
 var (
+	modeFlag              string
+	questionsFlag         string
+	questionsFileFlag     string
+	stateFormatFlag       string
+	batchQuestionsFlag    bool
 	providerFlag          string
 	systemInstruction     string
 	systemInstructionFile string
@@ -95,6 +100,9 @@ func main() {
 
 	if err := run(); err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		if getExitCode(err) == exitCLIUsageError {
+			printHelpHint()
+		}
 		os.Exit(getExitCode(err))
 	}
 }
@@ -102,6 +110,9 @@ func main() {
 func run() error {
 	defineFlags()
 	flag.Parse()
+	if flag.NArg() != 0 {
+		return &cliError{"unexpected positional arguments; use --prompt or stdin for input (options must precede positional arguments)"}
+	}
 
 	if showVersion {
 		fmt.Fprintf(os.Stderr, "%s\n", buildVersionString())
@@ -125,9 +136,16 @@ func run() error {
 		return err
 	}
 
+	// Simulated questions run separately unless batching is explicitly requested.
+	if config.Mode == "decisions" && config.Provider != "systemone" && !config.BatchQuestions && len(config.Questions) > 1 && !showURL {
+		return runIndependentDecisionQuestions(config, attachmentData)
+	}
+
 	// Build API request (provider-specific)
 	var requestBody []byte
-	if config.Provider == "openai" {
+	if config.Provider == "systemone" {
+		requestBody, err = buildSystemOneRequest(config)
+	} else if config.Provider == "openai" {
 		requestBody, err = buildOpenAIRequest(config, attachmentData)
 	} else {
 		requestBody, err = buildGeminiRequest(config, attachmentData)
@@ -166,7 +184,9 @@ func run() error {
 
 	// Call API (provider-specific)
 	var responseJSON string
-	if config.Provider == "openai" {
+	if config.Provider == "systemone" {
+		responseJSON, err = callSystemOneAPI(config, requestBody)
+	} else if config.Provider == "openai" {
 		responseJSON, err = callOpenAIAPI(config, requestBody)
 	} else {
 		responseJSON, err = callGeminiAPI(config, requestBody)
@@ -176,7 +196,13 @@ func run() error {
 	}
 
 	// Validate and format the JSON response
-	formattedJSON, validationErr := validateAndFormatJSON(config, responseJSON)
+	var formattedJSON string
+	var validationErr error
+	if config.Mode == "decisions" {
+		formattedJSON, validationErr = validateAndFormatDecisions(config, responseJSON)
+	} else {
+		formattedJSON, validationErr = validateAndFormatJSON(config, responseJSON)
+	}
 
 	// If validation failed, don't write to STDOUT
 	if validationErr != nil {
@@ -200,7 +226,13 @@ func run() error {
 }
 
 func defineFlags() {
-	flag.StringVar(&providerFlag, "provider", "", "API provider: gemini or openai (required)")
+	flag.Usage = printHelpHint
+	flag.StringVar(&modeFlag, "mode", "json", "Operation: json (default) or decisions")
+	flag.StringVar(&questionsFlag, "questions", "", "Jev questions object (decisions mode, inline JSON)")
+	flag.StringVar(&questionsFileFlag, "questions-file", "", "Jev questions object from file (decisions mode)")
+	flag.BoolVar(&batchQuestionsFlag, "batch-questions", false, "Send all decision questions in one LLM call (simulation only)")
+	flag.StringVar(&stateFormatFlag, "state-format", "text", "Decision state input: text (default) or json")
+	flag.StringVar(&providerFlag, "provider", "", "API provider: gemini, openai, or systemone (decisions only)")
 	flag.StringVar(&systemInstruction, "system-instruction", "", "System instruction (inline text)")
 	flag.StringVar(&systemInstructionFile, "system-instruction-file", "", "System instruction from file")
 	flag.StringVar(&schema, "schema", "", "JSON Schema (inline JSON)")
@@ -237,18 +269,32 @@ func (s *stringArrayValue) Set(value string) error {
 	return nil
 }
 
-func printHelp() {
-	fmt.Fprintf(os.Stderr, `prompt2json - Turn prompts into schema-validated JSON
+const helpText = `prompt2json - Turn prompts into schema-validated JSON
 
 Usage:
   prompt2json [OPTIONS]
 
 Provider (required):
-  --provider NAME            API provider: gemini or openai (required)
+  --provider NAME            API format: gemini, openai, or systemone
 
-Required (all providers):
+Mode:
+  --mode json                Default: caller-defined JSON Schema
+  --mode decisions           Jev questions, normalized System One answers
+
+Required in JSON mode (existing behavior):
   --system-instruction TEXT | --system-instruction-file PATH
   --schema JSON             | --schema-file PATH
+
+Required in decisions mode (replaces schema/system instruction):
+  --questions JSON          | --questions-file PATH
+                             A Jev questions object keyed by question ID
+  --batch-questions          Send all questions in one LLM call (simulation only;
+                             default: one call per question)
+  --state-format text|json   Interpret prompt/stdin as state (default: text)
+                             json accepts a JSON string, object, or array
+                             openai/gemini simulate; systemone calls natively
+
+Required in all modes:
   --model NAME
 
 Gemini-only (required unless --url is provided):
@@ -256,7 +302,8 @@ Gemini-only (required unless --url is provided):
   --location REGION         GCP location (env: GOOGLE_CLOUD_LOCATION)
 
 OpenAI-only:
-  --strict-schema            Enable strict mode for JSON schema validation
+  --strict-schema            Enable strict schema requests in JSON mode
+                             Decisions mode always sends strict: true
 
 Schema profile:
   --schema-profile PROFILE   Override schema profile for validation
@@ -271,6 +318,7 @@ Universal overrides:
 Input:
   --prompt TEXT              Prompt text (default: read from stdin)
   --prompt-file PATH         Read prompt from file (mutually exclusive with --prompt)
+                             In decisions mode, these supply the shared state
   --attach PATH              Attach file (repeatable): png, jpg/jpeg, webp, pdf
 
 Output:
@@ -289,12 +337,17 @@ Misc:
                              mismatched certificates. Not recommended for production.
   --verbose                  Log diagnostics to stderr
   --version                  Print version and exit
-  --help                     Print help and exit
+  --help                     Print help to stderr and exit (color on terminals)
 
 Environment (used if option not set):
   --project   GOOGLE_CLOUD_PROJECT, CLOUDSDK_CORE_PROJECT
   --location  GOOGLE_CLOUD_LOCATION, GOOGLE_CLOUD_REGION, CLOUDSDK_COMPUTE_REGION
   --api-key   OPENAI_API_KEY
+              SYSTEMONE_API_KEY for the systemone provider
+
+Help styling:
+  NO_COLOR  Disable help colors when set (including an empty value).
+            Redirected help and TERM=dumb also disable colors.
 
 Providers:
   gemini   Uses Vertex AI Gemini models. Default URL is constructed from
@@ -304,6 +357,10 @@ Providers:
            OPENAI_API_KEY unless --url is provided (for local servers like Ollama).
            Compatible with OpenAI, Google Cloud's OpenAI endpoint, Ollama, and
            other compatible services.
+  systemone Native Jev-compatible API (requires --mode decisions).
+            Default URL: https://api.typesafe.ai/v1/systemone
+            Requires --api-key or SYSTEMONE_API_KEY unless --url is provided.
+            Does not accept --attach, --strict-schema, or --schema-profile.
 
 Attachment support:
   gemini   Supports png, jpg, jpeg, webp, pdf (7 MB per image, 20 MB total)
@@ -336,8 +393,12 @@ Example (openai with Ollama):
     --system-instruction "Classify sentiment" \
     --schema '{"type":"object","properties":{"sentiment":{"type":"string"}},"required":["sentiment"],"additionalProperties":false}' \
     --model llama3
-`)
-}
+
+  # Native decisions; the same questions work with --provider openai or gemini
+  echo "The service is reachable." | prompt2json \
+    --mode decisions --provider systemone --model jev-latest \
+    --questions '{"reachable":{"type":"noul","instructions":"Is the service reachable?"}}'
+`
 
 var semverRe = regexp.MustCompile(`^\d+\.\d+\.\d+`)
 
@@ -350,6 +411,12 @@ func buildVersionString() string {
 }
 
 type Config struct {
+	Mode                 string
+	Questions            map[string]DecisionQuestion
+	BatchQuestions       bool
+	State                any
+	ResponseModel        string
+	ResponseUsage        map[string]any
 	Provider             string
 	SystemInstruction    string
 	SystemInstructionSrc string // Source: "flag" or file path
@@ -382,120 +449,216 @@ type Attachment struct {
 
 func loadConfiguration() (*Config, error) {
 	config := &Config{
-		Verbose:     verbose,
-		OutFile:     outFile,
-		PrettyPrint: prettyPrint,
+		Mode:           strings.ToLower(modeFlag),
+		BatchQuestions: batchQuestionsFlag,
+		Verbose:        verbose,
+		OutFile:        outFile,
+		PrettyPrint:    prettyPrint,
+	}
+	if config.Mode == "" { // Direct callers predating --mode retain JSON behavior.
+		config.Mode = "json"
+	}
+	if err := validateModeFlags(config.Mode); err != nil {
+		return nil, err
 	}
 
 	// Validate and set provider (now required)
 	provider := strings.ToLower(providerFlag)
 	if provider == "" {
-		return nil, &cliError{"--provider is required (gemini or openai)"}
+		return nil, &cliError{"--provider is required (gemini, openai, or systemone)"}
 	}
-	if provider != "gemini" && provider != "openai" {
-		return nil, &cliError{"--provider must be 'gemini' or 'openai'"}
+	if provider != "gemini" && provider != "openai" && provider != "systemone" {
+		return nil, &cliError{"--provider must be 'gemini', 'openai', or 'systemone'"}
+	}
+	if provider == "systemone" && config.Mode != "decisions" {
+		return nil, &cliError{"--provider systemone requires --mode decisions"}
 	}
 	config.Provider = provider
-
-	// Load system instruction
-	if systemInstruction != "" && systemInstructionFile != "" {
-		return nil, &cliError{"cannot specify both --system-instruction and --system-instruction-file"}
-	}
-	if systemInstruction == "" && systemInstructionFile == "" {
-		return nil, &cliError{"must specify either --system-instruction or --system-instruction-file"}
+	if provider == "systemone" && batchQuestionsFlag {
+		return nil, &cliError{"--batch-questions is only supported for decisions simulation; systemone always sends all questions together"}
 	}
 
-	if systemInstruction != "" {
-		config.SystemInstruction = strings.TrimSpace(systemInstruction)
-		config.SystemInstructionSrc = "flag"
-	} else {
-		content, err := os.ReadFile(systemInstructionFile)
-		if err != nil {
-			return nil, &inputError{fmt.Sprintf("failed to read system instruction file: %v", err)}
+	if config.Mode == "json" {
+		// Load system instruction
+		if systemInstruction != "" && systemInstructionFile != "" {
+			return nil, &cliError{"cannot specify both --system-instruction and --system-instruction-file"}
 		}
-		config.SystemInstruction = strings.TrimSpace(string(content))
-		config.SystemInstructionSrc = systemInstructionFile
-	}
+		if systemInstruction == "" && systemInstructionFile == "" {
+			return nil, &cliError{"must specify either --system-instruction or --system-instruction-file"}
+		}
 
-	if config.SystemInstruction == "" {
-		return nil, &inputError{"system instruction cannot be empty"}
-	}
-
-	if verbose {
-		if config.SystemInstructionSrc == "flag" {
-			fmt.Fprintf(os.Stderr, "System instruction: %d bytes (from flag)\n", len(config.SystemInstruction))
+		if systemInstruction != "" {
+			config.SystemInstruction = strings.TrimSpace(systemInstruction)
+			config.SystemInstructionSrc = "flag"
 		} else {
-			fmt.Fprintf(os.Stderr, "System instruction: %d bytes (from %s)\n", len(config.SystemInstruction), config.SystemInstructionSrc)
+			content, err := os.ReadFile(systemInstructionFile)
+			if err != nil {
+				return nil, &inputError{fmt.Sprintf("failed to read system instruction file: %v", err)}
+			}
+			config.SystemInstruction = strings.TrimSpace(string(content))
+			config.SystemInstructionSrc = systemInstructionFile
 		}
-	}
 
-	// Load schema
-	if schema != "" && schemaFile != "" {
-		return nil, &cliError{"cannot specify both --schema and --schema-file"}
-	}
-	if schema == "" && schemaFile == "" {
-		return nil, &cliError{"must specify either --schema or --schema-file"}
-	}
-
-	var schemaBytes []byte
-	if schema != "" {
-		schemaBytes = []byte(schema)
-		config.SchemaSrc = "flag"
-	} else {
-		content, err := os.ReadFile(schemaFile)
-		if err != nil {
-			return nil, &inputError{fmt.Sprintf("failed to read schema file: %v", err)}
+		if config.SystemInstruction == "" {
+			return nil, &inputError{"system instruction cannot be empty"}
 		}
-		schemaBytes = content
-		config.SchemaSrc = schemaFile
-	}
 
-	// Parse and validate schema
-	if err := json.Unmarshal(schemaBytes, &config.Schema); err != nil {
-		return nil, &inputError{fmt.Sprintf("invalid JSON in schema: %v", err)}
-	}
+		if verbose {
+			if config.SystemInstructionSrc == "flag" {
+				fmt.Fprintf(os.Stderr, "System instruction: %d bytes (from flag)\n", len(config.SystemInstruction))
+			} else {
+				fmt.Fprintf(os.Stderr, "System instruction: %d bytes (from %s)\n", len(config.SystemInstruction), config.SystemInstructionSrc)
+			}
+		}
 
-	if verbose {
-		if config.SchemaSrc == "flag" {
-			fmt.Fprintf(os.Stderr, "Schema: %d bytes (from flag) - valid JSON\n", len(schemaBytes))
+		// Load schema
+		if schema != "" && schemaFile != "" {
+			return nil, &cliError{"cannot specify both --schema and --schema-file"}
+		}
+		if schema == "" && schemaFile == "" {
+			return nil, &cliError{"must specify either --schema or --schema-file"}
+		}
+
+		var schemaBytes []byte
+		if schema != "" {
+			schemaBytes = []byte(schema)
+			config.SchemaSrc = "flag"
 		} else {
-			fmt.Fprintf(os.Stderr, "Schema: %d bytes (from %s) - valid JSON\n", len(schemaBytes), config.SchemaSrc)
+			content, err := os.ReadFile(schemaFile)
+			if err != nil {
+				return nil, &inputError{fmt.Sprintf("failed to read schema file: %v", err)}
+			}
+			schemaBytes = content
+			config.SchemaSrc = schemaFile
+		}
+
+		// Parse and validate schema
+		if err := json.Unmarshal(schemaBytes, &config.Schema); err != nil {
+			return nil, &inputError{fmt.Sprintf("invalid JSON in schema: %v", err)}
+		}
+
+		if verbose {
+			if config.SchemaSrc == "flag" {
+				fmt.Fprintf(os.Stderr, "Schema: %d bytes (from flag) - valid JSON\n", len(schemaBytes))
+			} else {
+				fmt.Fprintf(os.Stderr, "Schema: %d bytes (from %s) - valid JSON\n", len(schemaBytes), config.SchemaSrc)
+			}
+		}
+
+		// Validate schema against provider-specific profile using jsonschemaprofiles
+		profileID := resolveSchemaProfile(provider, schemaProfileFlag)
+		config.SchemaProfile = string(profileID)
+
+		report, err := jsp.ValidateSchema(profileID, schemaBytes, nil)
+		if err != nil {
+			return nil, &inputError{fmt.Sprintf("schema profile validation failed: %v", err)}
+		}
+
+		if !report.Valid {
+			fmt.Fprintf(os.Stderr, "Schema profile validation (%s):\n%s\n", profileID, report.Text())
+			return nil, &inputError{fmt.Sprintf("schema does not conform to %s profile; see https://jsonschemaprofiles.unitvectorylabs.com/ for details on schema limitations", profileID)}
+		}
+
+		if verbose {
+			fmt.Fprintf(os.Stderr, "Schema profile validation (%s): PASSED\n", profileID)
+		}
+
+		// Compile the JSON Schema once for reuse
+		compiler := jsonschema.NewCompiler()
+		compiler.Draft = jsonschema.Draft2020
+		if err := compiler.AddResource(schemaValidationURL, bytes.NewReader(schemaBytes)); err != nil {
+			return nil, &inputError{fmt.Sprintf("invalid JSON Schema: %v", err)}
+		}
+		compiledSchema, err := compiler.Compile(schemaValidationURL)
+		if err != nil {
+			return nil, &inputError{fmt.Sprintf("invalid JSON Schema structure: %v", err)}
+		}
+		config.CompiledSchema = compiledSchema
+
+		if verbose {
+			fmt.Fprintf(os.Stderr, "Schema validation: compiled successfully\n")
+		}
+	} else {
+		if err := loadDecisionQuestions(config); err != nil {
+			return nil, err
 		}
 	}
 
-	// Validate schema against provider-specific profile using jsonschemaprofiles
-	profileID := resolveSchemaProfile(provider, schemaProfileFlag)
-	config.SchemaProfile = string(profileID)
-
-	report, err := jsp.ValidateSchema(profileID, schemaBytes, nil)
-	if err != nil {
-		return nil, &inputError{fmt.Sprintf("schema profile validation failed: %v", err)}
+	// Universal flags
+	config.URL = urlFlag
+	config.APIKey = getConfigValue(apiKeyFlag, "OPENAI_API_KEY")
+	if provider == "systemone" {
+		config.APIKey = getConfigValue(apiKeyFlag, "SYSTEMONE_API_KEY")
 	}
 
-	if !report.Valid {
-		fmt.Fprintf(os.Stderr, "Schema profile validation (%s):\n%s\n", profileID, report.Text())
-		return nil, &inputError{fmt.Sprintf("schema does not conform to %s profile; see https://jsonschemaprofiles.unitvectorylabs.com/ for details on schema limitations", profileID)}
+	// Provider-specific configuration
+	if config.Provider == "gemini" {
+		// Gemini: require project/location unless --url is provided
+		if config.URL == "" {
+			config.Project = getConfigValue(projectFlag, "GOOGLE_CLOUD_PROJECT", "CLOUDSDK_CORE_PROJECT")
+			if config.Project == "" {
+				return nil, &cliError{"--project is required for gemini provider (or set GOOGLE_CLOUD_PROJECT, or use --url)"}
+			}
+
+			// Validate project ID
+			if !project.IsValidProjectID(config.Project) {
+				return nil, &inputError{fmt.Sprintf("invalid GCP project ID: %s", config.Project)}
+			}
+
+			config.Location = getConfigValue(locationFlag, "GOOGLE_CLOUD_LOCATION", "GOOGLE_CLOUD_REGION", "CLOUDSDK_COMPUTE_REGION")
+			if config.Location == "" {
+				return nil, &cliError{"--location is required for gemini provider (or set GOOGLE_CLOUD_LOCATION, or use --url)"}
+			}
+
+			// Validate region (allow "global" for Vertex AI models that are only available globally)
+			if config.Location != "global" && !location.IsValidRegion(config.Location) {
+				return nil, &inputError{fmt.Sprintf("invalid GCP region: %s", config.Location)}
+			}
+		} else {
+			// When --url is provided, project/location are optional
+			config.Project = projectFlag
+			config.Location = locationFlag
+		}
+
+		// Reject --strict-schema for gemini provider
+		if strictSchemaFlag {
+			return nil, &cliError{"--strict-schema is only valid for openai provider"}
+		}
+	} else {
+		// Non-Gemini providers reject project/location.
+		if projectFlag != "" {
+			return nil, &cliError{fmt.Sprintf("--project is not valid for %s provider", provider)}
+		}
+		if locationFlag != "" {
+			return nil, &cliError{fmt.Sprintf("--location is not valid for %s provider", provider)}
+		}
+		if provider == "systemone" && (strictSchemaFlag || schemaProfileFlag != "" || len(attachments) != 0) {
+			return nil, &cliError{"--strict-schema, --schema-profile, and --attach are not supported by the systemone provider"}
+		}
+
+		// Set strict schema flag for OpenAI
+		config.StrictSchema = strictSchemaFlag || (provider == "openai" && config.Mode == "decisions")
 	}
 
-	if verbose {
-		fmt.Fprintf(os.Stderr, "Schema profile validation (%s): PASSED\n", profileID)
+	// Model is required for all providers
+	config.Model = getConfigValue(modelFlag)
+	if config.Model == "" {
+		return nil, &cliError{"--model is required"}
 	}
 
-	// Compile the JSON Schema once for reuse
-	compiler := jsonschema.NewCompiler()
-	compiler.Draft = jsonschema.Draft2020
-	if err := compiler.AddResource(schemaValidationURL, bytes.NewReader(schemaBytes)); err != nil {
-		return nil, &inputError{fmt.Sprintf("invalid JSON Schema: %v", err)}
+	// Validate model name only for gemini provider
+	if config.Provider == "gemini" && config.URL == "" {
+		if !vertexai.IsValidVertexModelName(config.Model) {
+			return nil, &inputError{fmt.Sprintf("invalid Vertex AI model name: %s", config.Model)}
+		}
 	}
-	compiledSchema, err := compiler.Compile(schemaValidationURL)
-	if err != nil {
-		return nil, &inputError{fmt.Sprintf("invalid JSON Schema structure: %v", err)}
-	}
-	config.CompiledSchema = compiledSchema
 
-	if verbose {
-		fmt.Fprintf(os.Stderr, "Schema validation: compiled successfully\n")
+	// Validate timeout
+	if timeout < autoTimeoutSeconds {
+		return nil, &cliError{"--timeout must be 0 or greater (-1 is reserved for automatic defaults)"}
 	}
+	config.Timeout = timeout
+	config.Insecure = insecureFlag
 
 	// Load prompt
 	if prompt != "" && promptFile != "" {
@@ -537,75 +700,11 @@ func loadConfiguration() (*Config, error) {
 		}
 	}
 
-	// Universal flags
-	config.URL = urlFlag
-	config.APIKey = getConfigValue(apiKeyFlag, "OPENAI_API_KEY")
-
-	// Provider-specific configuration
-	if config.Provider == "gemini" {
-		// Gemini: require project/location unless --url is provided
-		if config.URL == "" {
-			config.Project = getConfigValue(projectFlag, "GOOGLE_CLOUD_PROJECT", "CLOUDSDK_CORE_PROJECT")
-			if config.Project == "" {
-				return nil, &cliError{"--project is required for gemini provider (or set GOOGLE_CLOUD_PROJECT, or use --url)"}
-			}
-
-			// Validate project ID
-			if !project.IsValidProjectID(config.Project) {
-				return nil, &inputError{fmt.Sprintf("invalid GCP project ID: %s", config.Project)}
-			}
-
-			config.Location = getConfigValue(locationFlag, "GOOGLE_CLOUD_LOCATION", "GOOGLE_CLOUD_REGION", "CLOUDSDK_COMPUTE_REGION")
-			if config.Location == "" {
-				return nil, &cliError{"--location is required for gemini provider (or set GOOGLE_CLOUD_LOCATION, or use --url)"}
-			}
-
-			// Validate region (allow "global" for Vertex AI models that are only available globally)
-			if config.Location != "global" && !location.IsValidRegion(config.Location) {
-				return nil, &inputError{fmt.Sprintf("invalid GCP region: %s", config.Location)}
-			}
-		} else {
-			// When --url is provided, project/location are optional
-			config.Project = projectFlag
-			config.Location = locationFlag
-		}
-
-		// Reject --strict-schema for gemini provider
-		if strictSchemaFlag {
-			return nil, &cliError{"--strict-schema is only valid for openai provider"}
-		}
-	} else {
-		// OpenAI provider: reject --project and --location with hard error
-		if projectFlag != "" {
-			return nil, &cliError{"--project is not valid for openai provider"}
-		}
-		if locationFlag != "" {
-			return nil, &cliError{"--location is not valid for openai provider"}
-		}
-
-		// Set strict schema flag for OpenAI
-		config.StrictSchema = strictSchemaFlag
-	}
-
-	// Model is required for all providers
-	config.Model = getConfigValue(modelFlag)
-	if config.Model == "" {
-		return nil, &cliError{"--model is required"}
-	}
-
-	// Validate model name only for gemini provider
-	if config.Provider == "gemini" && config.URL == "" {
-		if !vertexai.IsValidVertexModelName(config.Model) {
-			return nil, &inputError{fmt.Sprintf("invalid Vertex AI model name: %s", config.Model)}
+	if config.Mode == "decisions" {
+		if err := prepareDecisionInput(config); err != nil {
+			return nil, err
 		}
 	}
-
-	// Validate timeout
-	if timeout < autoTimeoutSeconds {
-		return nil, &cliError{"--timeout must be 0 or greater (-1 is reserved for automatic defaults)"}
-	}
-	config.Timeout = timeout
-	config.Insecure = insecureFlag
 
 	if verbose {
 		if config.Provider == "gemini" {
@@ -616,11 +715,11 @@ func loadConfiguration() (*Config, error) {
 				fmt.Fprintf(os.Stderr, "API configuration: project=%s location=%s model=%s\n", config.Project, config.Location, config.Model)
 			}
 		} else {
-			fmt.Fprintf(os.Stderr, "Provider: openai\n")
+			fmt.Fprintf(os.Stderr, "Provider: %s\n", provider)
 			if config.URL != "" {
 				fmt.Fprintf(os.Stderr, "API configuration: url=%s model=%s\n", config.URL, config.Model)
 			} else {
-				fmt.Fprintf(os.Stderr, "API configuration: url=%s model=%s\n", defaultOpenAIURL, config.Model)
+				fmt.Fprintf(os.Stderr, "API configuration: url=%s model=%s\n", buildAPIURL(config), config.Model)
 			}
 		}
 		if config.Insecure {
@@ -800,6 +899,9 @@ func buildAPIURL(config *Config) string {
 	if config.Provider == "openai" {
 		return defaultOpenAIURL
 	}
+	if config.Provider == "systemone" {
+		return defaultSystemOneURL
+	}
 
 	// Default: Gemini
 	return buildGeminiURL(config)
@@ -924,6 +1026,11 @@ func callGeminiAPI(config *Config, requestBody []byte) (string, error) {
 
 	if err := json.Unmarshal(respBody, &geminiResp); err != nil {
 		return "", &validationError{fmt.Sprintf("failed to parse response: %v", err)}
+	}
+	if config.Mode == "decisions" {
+		if err := captureDecisionMetadata(config, respBody, "gemini"); err != nil {
+			return "", err
+		}
 	}
 
 	if len(geminiResp.Candidates) == 0 {
@@ -1117,6 +1224,11 @@ func callOpenAIAPI(config *Config, requestBody []byte) (string, error) {
 
 	if err := json.Unmarshal(respBody, &openaiResp); err != nil {
 		return "", &validationError{fmt.Sprintf("failed to parse response: %v", err)}
+	}
+	if config.Mode == "decisions" {
+		if err := captureDecisionMetadata(config, respBody, "openai"); err != nil {
+			return "", err
+		}
 	}
 
 	if len(openaiResp.Choices) == 0 {

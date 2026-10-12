@@ -21,6 +21,10 @@ Each example demonstrates a different capability. Examples using the Gemini prov
 {: .highlight }
 The `--provider` flag is required. Refer to [Google's latest stable models](https://docs.cloud.google.com/vertex-ai/generative-ai/docs/learn/model-versions#latest-stable) for Gemini and [OpenAI's models](https://platform.openai.com/docs/models) for OpenAI.
 
+## Decisions
+
+For native System One calls and traditional LLM simulation using the same Jev question file, see [Decisions mode](decisions). Existing examples below use the default JSON mode.
+
 ## Text Analysis
 
 ### Gemini

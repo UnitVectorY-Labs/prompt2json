@@ -1,0 +1,29 @@
+{
+  "reachable": {
+    "type": "noul",
+    "instructions": "Is the service currently reachable?",
+    "criteria": {
+      "true": "The evidence explicitly says that the service is reachable.",
+      "false": "The evidence explicitly says that the service is unreachable."
+    }
+  },
+  "severity": {
+    "type": "choice",
+    "instructions": "How severe is the operational situation?",
+    "criteria": {
+      "low": "Service healthy and no operational problem requiring action.",
+      "medium": "Degradation or resource pressure that should be addressed soon.",
+      "high": "Production outage, or disk usage at least 95 percent and growing; act now.",
+      "unknown": "The evidence is insufficient to determine operational severity."
+    }
+  },
+  "urgency": {
+    "type": "score",
+    "instructions": "How urgently does this operational situation need action?",
+    "criteria": [
+      "No operational problem; no action needed.",
+      "A degraded service or resource pressure; action can wait until the next working day.",
+      "Production is unavailable, or disk usage is at least 95 percent and growing; immediate action needed."
+    ]
+  }
+}
