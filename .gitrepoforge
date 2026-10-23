@@ -1,6 +1,7 @@
 name: prompt2json
 default_branch: main
 config:
+  osv: sarif
   description: "Unix-style CLI that sends a system instruction, required JSON Schema, and text or inline file inputs to LLM APIs and returns schema-validated JSON for easy batch processing. Supports Vertex AI (Gemini) and OpenAI-compatible Chat Completions endpoints."
   license: MIT
   language: go
