@@ -3,7 +3,7 @@ package main
 import (
 	"bytes"
 	_ "embed"
-	"encoding/json"
+	"encoding/json/v2"
 	"fmt"
 	"io"
 	"math"
@@ -32,8 +32,8 @@ var decisionQuestionsSchema = jsonschema.MustCompileString("questions.schema.jso
 // retained as JSON rather than flattened, including null choice descriptions.
 type DecisionQuestion struct {
 	Type         string `json:"type"`
-	Instructions any    `json:"instructions,omitempty"`
-	Criteria     any    `json:"criteria,omitempty"`
+	Instructions any    `json:"instructions,omitzero"`
+	Criteria     any    `json:"criteria,omitzero"`
 }
 
 func validateModeFlags(mode string) error {
@@ -161,62 +161,11 @@ func isDecisionDescription(value any, nullable bool) bool {
 // Reject duplicate keys and trailing documents: otherwise a typo can silently
 // replace a question, option, or probability before validation sees it.
 func decodeUniqueJSON(data []byte) (any, error) {
-	decoder := json.NewDecoder(bytes.NewReader(data))
-	value, err := readUniqueJSONValue(decoder)
-	if err != nil {
-		return nil, err
-	}
-	if _, err := decoder.Token(); err != io.EOF {
-		if err == nil {
-			return nil, fmt.Errorf("expected exactly one JSON value")
-		}
+	var value any
+	if err := json.Unmarshal(data, &value); err != nil {
 		return nil, err
 	}
 	return value, nil
-}
-
-func readUniqueJSONValue(decoder *json.Decoder) (any, error) {
-	token, err := decoder.Token()
-	if err != nil {
-		return nil, err
-	}
-	switch token {
-	case json.Delim('{'):
-		object := map[string]any{}
-		for decoder.More() {
-			keyToken, err := decoder.Token()
-			if err != nil {
-				return nil, err
-			}
-			key, ok := keyToken.(string)
-			if !ok {
-				return nil, fmt.Errorf("expected an object key")
-			}
-			if _, exists := object[key]; exists {
-				return nil, fmt.Errorf("duplicate JSON key %q", key)
-			}
-			value, err := readUniqueJSONValue(decoder)
-			if err != nil {
-				return nil, err
-			}
-			object[key] = value
-		}
-		_, err := decoder.Token()
-		return object, err
-	case json.Delim('['):
-		array := []any{}
-		for decoder.More() {
-			value, err := readUniqueJSONValue(decoder)
-			if err != nil {
-				return nil, err
-			}
-			array = append(array, value)
-		}
-		_, err := decoder.Token()
-		return array, err
-	default:
-		return token, nil
-	}
 }
 
 func sortedKeys[T any](values map[string]T) []string {

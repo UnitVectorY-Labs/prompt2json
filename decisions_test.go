@@ -2,7 +2,7 @@ package main
 
 import (
 	"bytes"
-	"encoding/json"
+	"encoding/json/v2"
 	"fmt"
 	"math"
 	"net/http"
@@ -328,7 +328,7 @@ func runDecisionCLI(t *testing.T, stdin string, args ...string) (string, string,
 func TestDecisionCLINative(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var request map[string]any
-		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+		if err := json.UnmarshalRead(r.Body, &request); err != nil {
 			t.Error(err)
 		}
 		if request["model"] != "decision-model" || request["state"].(map[string]any)["message"] != "Reachable" {
@@ -371,7 +371,7 @@ func TestDecisionCLISimulation(t *testing.T) {
 			content := `{"answers":{"q0":{"noul":0.9},"q1":{"probabilities":{"a":0.1,"b":0.3,"c":0.6}},"q2":{"probabilities":{"0":0.1,"1":0.7,"2":0.2}}}}`
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				var request map[string]any
-				if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+				if err := json.UnmarshalRead(r.Body, &request); err != nil {
 					t.Error(err)
 				}
 				var instruction, evidence string
@@ -383,14 +383,14 @@ func TestDecisionCLISimulation(t *testing.T) {
 					if schema["strict"] != true {
 						t.Error("simulation must enable strict schema")
 					}
-					json.NewEncoder(w).Encode(map[string]any{"model": "resolved-generative-model", "choices": []any{map[string]any{"message": map[string]any{"content": content}, "finish_reason": "stop"}}, "usage": map[string]any{"prompt_tokens": 55, "completion_tokens": 117, "total_tokens": 172}})
+					json.MarshalWrite(w, map[string]any{"model": "resolved-generative-model", "choices": []any{map[string]any{"message": map[string]any{"content": content}, "finish_reason": "stop"}}, "usage": map[string]any{"prompt_tokens": 55, "completion_tokens": 117, "total_tokens": 172}})
 				} else {
 					instruction = request["systemInstruction"].(map[string]any)["parts"].([]any)[0].(map[string]any)["text"].(string)
 					evidence = request["contents"].([]any)[0].(map[string]any)["parts"].([]any)[0].(map[string]any)["text"].(string)
 					if request["generationConfig"].(map[string]any)["responseMimeType"] != "application/json" {
 						t.Error("missing constrained output")
 					}
-					json.NewEncoder(w).Encode(map[string]any{"modelVersion": "resolved-gemini", "candidates": []any{map[string]any{"content": map[string]any{"parts": []any{map[string]any{"text": content}}}, "finishReason": "STOP"}}, "usageMetadata": map[string]any{"promptTokenCount": 55, "candidatesTokenCount": 14, "thoughtsTokenCount": 3, "totalTokenCount": 72}})
+					json.MarshalWrite(w, map[string]any{"modelVersion": "resolved-gemini", "candidates": []any{map[string]any{"content": map[string]any{"parts": []any{map[string]any{"text": content}}}, "finishReason": "STOP"}}, "usageMetadata": map[string]any{"promptTokenCount": 55, "candidatesTokenCount": 14, "thoughtsTokenCount": 3, "totalTokenCount": 72}})
 				}
 				if !strings.Contains(instruction, `"q0"`) || strings.Contains(instruction, `"severity"`) || !strings.Contains(evidence, `"state":"The service is reachable."`) {
 					t.Errorf("questions and evidence mixed: %s / %s", instruction, evidence)
@@ -480,7 +480,7 @@ func TestDecisionCLIIndependentQuestions(t *testing.T) {
 					t.Error("mock requests must use the explicit fake API key")
 				}
 				var request map[string]any
-				json.NewDecoder(r.Body).Decode(&request)
+				json.UnmarshalRead(r.Body, &request)
 				var schema map[string]any
 				var instruction, evidence string
 				if provider == "openai" {
@@ -509,9 +509,9 @@ func TestDecisionCLIIndependentQuestions(t *testing.T) {
 					t.Error("unexpected extra call")
 				}
 				if provider == "openai" {
-					json.NewEncoder(w).Encode(map[string]any{"model": "resolved-model", "choices": []any{map[string]any{"message": map[string]any{"content": content}, "finish_reason": "stop"}}, "usage": map[string]any{"prompt_tokens": 10, "completion_tokens": 5}})
+					json.MarshalWrite(w, map[string]any{"model": "resolved-model", "choices": []any{map[string]any{"message": map[string]any{"content": content}, "finish_reason": "stop"}}, "usage": map[string]any{"prompt_tokens": 10, "completion_tokens": 5}})
 				} else {
-					json.NewEncoder(w).Encode(map[string]any{"modelVersion": "resolved-model", "candidates": []any{map[string]any{"content": map[string]any{"parts": []any{map[string]any{"text": content}}}, "finishReason": "STOP"}}, "usageMetadata": map[string]any{"promptTokenCount": 10, "candidatesTokenCount": 4, "thoughtsTokenCount": 1}})
+					json.MarshalWrite(w, map[string]any{"modelVersion": "resolved-model", "candidates": []any{map[string]any{"content": map[string]any{"parts": []any{map[string]any{"text": content}}}, "finishReason": "STOP"}}, "usageMetadata": map[string]any{"promptTokenCount": 10, "candidatesTokenCount": 4, "thoughtsTokenCount": 1}})
 				}
 			}))
 			defer server.Close()
@@ -573,7 +573,7 @@ func TestDecisionCLIIndependentFailureIsAtomic(t *testing.T) {
 					model = "different-model"
 					content = `{"answers":{"q0":{"probabilities":{"a":0,"b":0,"c":1}}}}`
 				}
-				json.NewEncoder(w).Encode(map[string]any{"model": model, "choices": []any{map[string]any{"message": map[string]any{"content": content}, "finish_reason": "stop"}}, "usage": map[string]any{"prompt_tokens": 10, "completion_tokens": 5}})
+				json.MarshalWrite(w, map[string]any{"model": model, "choices": []any{map[string]any{"message": map[string]any{"content": content}, "finish_reason": "stop"}}, "usage": map[string]any{"prompt_tokens": 10, "completion_tokens": 5}})
 			}))
 			defer server.Close()
 			file := filepath.Join(t.TempDir(), "output.json")
@@ -637,5 +637,22 @@ func TestDecisionCLIFailureDoesNotWriteOutput(t *testing.T) {
 				t.Fatalf("failed response overwrote output: %s %v", data, err)
 			}
 		})
+	}
+}
+
+func TestDecisionQuestionPreservesEmptyDescriptions(t *testing.T) {
+	for _, tc := range []struct {
+		value any
+		want  string
+	}{
+		{nil, `{"type":"noul"}`},
+		{"", `{"type":"noul","instructions":""}`},
+		{[]any{}, `{"type":"noul","instructions":[]}`},
+		{map[string]any{}, `{"type":"noul","instructions":{}}`},
+	} {
+		data, err := json.Marshal(DecisionQuestion{Type: "noul", Instructions: tc.value})
+		if err != nil || string(data) != tc.want {
+			t.Errorf("value %#v: got %s, error %v, want %s", tc.value, data, err, tc.want)
+		}
 	}
 }
