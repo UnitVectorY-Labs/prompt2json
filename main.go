@@ -5,7 +5,8 @@ import (
 	"context"
 	"crypto/tls"
 	"encoding/base64"
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"flag"
 	"fmt"
 	"io"
@@ -166,12 +167,11 @@ func run() error {
 	if showRequestBody {
 		var formattedRequest string
 		if prettyPrint {
-			// Pretty-print the request body using json.Indent
-			var prettyBuf bytes.Buffer
-			if err := json.Indent(&prettyBuf, requestBody, "", "  "); err != nil {
+			pretty := jsontext.Value(requestBody)
+			if err := pretty.Indent(jsontext.WithIndent("  "), jsontext.AllowDuplicateNames(false), jsontext.AllowInvalidUTF8(false)); err != nil {
 				return &inputError{fmt.Sprintf("failed to format request body: %v", err)}
 			}
-			formattedRequest = prettyBuf.String()
+			formattedRequest = string(pretty)
 		} else {
 			formattedRequest = string(requestBody)
 		}
@@ -1268,9 +1268,9 @@ func formatJSON(jsonObj any, prettyPrint bool) (string, error) {
 	var err error
 
 	if prettyPrint {
-		formattedBytes, err = json.MarshalIndent(jsonObj, "", "  ")
+		formattedBytes, err = json.Marshal(jsonObj, jsontext.WithIndent("  "), json.Deterministic(true))
 	} else {
-		formattedBytes, err = json.Marshal(jsonObj)
+		formattedBytes, err = json.Marshal(jsonObj, json.Deterministic(true))
 	}
 
 	if err != nil {

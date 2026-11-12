@@ -3,10 +3,11 @@ package main
 import (
 	"bytes"
 	"encoding/base64"
-	"encoding/json"
+	"encoding/json/v2"
 	"errors"
 	"fmt"
 	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -709,6 +710,35 @@ func TestBuildVersionString(t *testing.T) {
 			Version = tc.version
 			if got := buildVersionString(); got != tc.want {
 				t.Fatalf("expected %q, got %q", tc.want, got)
+			}
+		})
+	}
+}
+
+func TestJSONV2RejectsAmbiguousResponses(t *testing.T) {
+	for _, raw := range []string{`{"value":1,"value":2}`, `{"nested":{"x":1,"x":2}}`, "{\"value\":\"\xff\"}", `{} {}`} {
+		got, err := validateAndFormatJSON(&Config{}, raw)
+		if err == nil || !strings.Contains(err.Error(), "response is not valid JSON") || got != raw {
+			t.Errorf("response %q: got %q, error %v", raw, got, err)
+		}
+	}
+}
+
+func TestOpenAIResponseUsesExactFieldNames(t *testing.T) {
+	for _, tc := range []struct {
+		name, body string
+		wantOK     bool
+	}{
+		{"exact", `{"choices":[{"message":{"content":"{}"},"finish_reason":"stop"}]}`, true},
+		{"wrong case", `{"Choices":[{"message":{"content":"{}"},"finish_reason":"stop"}]}`, false},
+		{"duplicate", `{"choices":[],"choices":[{"message":{"content":"{}"},"finish_reason":"stop"}]}`, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { fmt.Fprint(w, tc.body) }))
+			defer server.Close()
+			got, err := callOpenAIAPI(&Config{Provider: "openai", URL: server.URL}, []byte(`{}`))
+			if (err == nil) != tc.wantOK || (tc.wantOK && got != `{}`) {
+				t.Fatalf("got %q, error %v", got, err)
 			}
 		})
 	}
